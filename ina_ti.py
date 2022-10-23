@@ -1,9 +1,4 @@
 """INAxxx Texas Instruments sensors module"""
-
-# micropython
-# MIT license
-# Copyright (c) 2022 Roman Shevchik   goctaprog@gmail.com
-
 from sensor_pack import bus_service
 from sensor_pack.base_sensor import BaseSensor, Iterator, check_value
 # from sensor_pack import bitfield
@@ -81,8 +76,7 @@ class INA219(BaseSensor, Iterator):
     def _read_register(self, reg_addr, bytes_count=2) -> bytes:
         """считывает из регистра датчика значение.
         bytes_count - размер значения в байтах"""
-        b = self.adapter.read_register(self.address, reg_addr, bytes_count)
-        return b
+        return self.adapter.read_register(self.address, reg_addr, bytes_count)
 
         # BaseSensor
     def _write_register(self, reg_addr, value: [int, bytes, bytearray], bytes_count=2) -> int:
@@ -102,10 +96,8 @@ class INA219(BaseSensor, Iterator):
         Флаг математического переполнения (OVF) устанавливается, когда расчеты мощности или тока выходят за допустимые
         пределы. Это указывает на то, что данные о токе и мощности могут быть бессмысленными!"""
         # DC ACCURACY:  ADC basic resolution: 12 bit;    Bus voltage, 1 LSB step size: 4 mV
-        reg_raw = self._read_register(0x02, 2)[0]
-        ovf = bool(reg_raw & 0x01)
-        cnvr = bool(reg_raw & 0x02)
-        return 0.004 * (reg_raw >> 2), cnvr, ovf
+        reg_raw = self.unpack("h", self._read_register(0x02, 2))[0]
+        return 0.004 * (reg_raw >> 3), bool(reg_raw & 0x02), bool(reg_raw & 0x01)
 
     def get_power(self):
         reg_raw = self._read_register(0x03, 2)[0]
