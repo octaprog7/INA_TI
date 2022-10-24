@@ -1,16 +1,91 @@
-"""INAxxx Texas Instruments sensors module"""
+"""INAxxx Texas Instruments sensors module.
+
+Внимание! для долговременной непрерывной работы токового шунта, не допускайте выделения на нем более половины(!) от его
+максимальной рассеиваемой мощности!
+Мощность, выделяемая на любом сопротивлении (постоянный ток), расчитывается по формуле: P=I^2*R
+где: I - ток в Амперах; R - сопротивление в Омах.
+
+Attention! for long-term continuous operation of the current shunt, do not allow more than half(!) of its maximum
+dissipated power to be allocated on it!!
+The power dissipated on any resistance (direct current) is calculated by the formula: P=I^2*R
+where: I - current in Amperes; R - resistance in ohms"""
 from sensor_pack import bus_service
-from sensor_pack.base_sensor import BaseSensor, Iterator, check_value
+from sensor_pack.base_sensor import BaseSensor, Device, Iterator, check_value
 # from sensor_pack import bitfield
 # import struct
 # import array
 
 
-class INA219(BaseSensor, Iterator):
+class InaBase(Device):
+    """Base class for INA current/voltage monitor"""
+    def __init__(self, adapter: bus_service.BusAdapter, address):
+        """shunt_resistance - сопротивление шунта, [Ом]"""
+        super().__init__(adapter, address, True)    # All data bytes are transmitted most significant byte first.
+
+    def _read_register(self, reg_addr, bytes_count=2) -> bytes:
+        """считывает из регистра датчика значение.
+        bytes_count - размер значения в байтах"""
+        return self.adapter.read_register(self.address, reg_addr, bytes_count)
+
+        # BaseSensor
+    def _write_register(self, reg_addr, value: [int, bytes, bytearray], bytes_count=2) -> int:
+        """записывает данные value в датчик, по адресу reg_addr.
+        bytes_count - кол-во записываемых данных"""
+        byte_order = self._get_byteorder_as_str()[0]
+        return self.adapter.write_register(self.address, reg_addr, value, bytes_count, byte_order)
+
+    def _set_raw_cfg(self, value: int) -> int:
+        return self._write_register(0x00, value, 2)
+
+    def _get_raw_cfg(self) -> int:
+        b = self._read_register(0x00, 2)
+        return self.unpack("H", b)[0]
+
+
+class INA219Simple(InaBase):
+    """Класс для работы с датчиком TI INA219 без какой либо настройки!
+    Диапазон измерения входного напряжения: 0-26 Вольт.
+    Диапазон измерения напряжения на токоизмерительном шунте: ±320 милливолт.
+    Никаких настроек нет!
+    ---------------------
+    A class for working with a TI INA219 sensor without any configuration!
+    Input voltage measurement range: 0-26 Volts.
+    Voltage measurement range on the current measuring shunt: ±320 millivolts.
+    There are no settings!"""
+    def __init__(self, adapter: bus_service.BusAdapter, address=0x40):
+        super().__init__(adapter, address)
+        self._set_raw_cfg(0b0011_1001_1001_1111)    # 0x399F    default setting, simple reading two voltages
+
+    def get_shunt_voltage(self) -> float:
+        """Возвращает напряжение на шунте в Вольтах. Чтобы вычислить ток через шунт, нужно это напряжение поделить
+        на сопротивление шунта в Омах!!!
+        Returns the shunt voltage in Volts. To calculate the current through the shunt, you need to divide this voltage
+        by the resistance of the shunt in ohms !!!"""
+        # DC ACCURACY:  ADC basic resolution: 12 bit;    Shunt voltage, 1 LSB step size: 10 μV
+        reg_raw = self._read_register(0x01, 2)
+        return 1E-5 * self.unpack("h", reg_raw)[0]
+
+    def get_voltage(self) -> tuple:
+        """Возвращает кортеж из входного измеряемого напряжения, флага готовности данных, флага математического
+        переполнения (OVF).
+        Флаг математического переполнения (OVF) устанавливается, когда расчеты мощности или тока выходят за допустимые
+        пределы. Это указывает на то, что данные о токе и мощности могут быть бессмысленными!
+        ------------------------------------------------------------------------------
+        Returns a tuple of input measured voltage, data ready flag, math overflow flag (OVF).
+        The Math Overflow Flag (OVF) is set when power or current calculations are out of range.
+        This indicates that current and power data may be meaningless!"""
+        # DC ACCURACY:  ADC basic resolution: 12 bit;    Bus voltage, 1 LSB step size: 4 mV
+        reg_raw = self.unpack("h", self._read_register(0x02, 2))[0]
+        #           voltage             data ready flag         math overflow flag
+        return 0.004 * (reg_raw >> 3), bool(reg_raw & 0x02), bool(reg_raw & 0x01)
+
+
+class INA219(INA219Simple, Iterator):
     """Class for work with TI INA219 sensor"""
     def __init__(self, adapter: bus_service.BusAdapter, address=0x40):
         """shunt_resistance - сопротивление шунта, [Ом]"""
-        super().__init__(adapter, address, True)    # All data bytes are transmitted most significant byte first.
+        super().__init__(adapter, address)
+        #
         self.bus_voltage_range = True  # False - 16 V; True - 32 V
         self.continuous_mode = True    # непрерывный или однократный режимы работы
         self.bus_voltage = True        # измерение напряжения на шине, режимы работы
@@ -26,13 +101,6 @@ class INA219(BaseSensor, Iterator):
         self._current_adc_resolution = 3
         # разрешение/усреднение АЦП входного изменяемого напряж. 12 bit. Conversion time: 532 μs
         self._voltage_adc_resolution = 3
-
-    def _set_raw_cfg(self, value: int) -> int:
-        return self._write_register(0x00, value, 2)
-
-    def _get_raw_cfg(self) -> int:
-        b = self._read_register(0x00, 2)
-        return self.unpack("H", b)[0]
 
     @property
     def current_shunt_voltage_range(self):
@@ -73,31 +141,6 @@ class INA219(BaseSensor, Iterator):
         return raw_cfg
 
     # BaseSensor
-    def _read_register(self, reg_addr, bytes_count=2) -> bytes:
-        """считывает из регистра датчика значение.
-        bytes_count - размер значения в байтах"""
-        return self.adapter.read_register(self.address, reg_addr, bytes_count)
-
-        # BaseSensor
-    def _write_register(self, reg_addr, value: [int, bytes, bytearray], bytes_count=2) -> int:
-        """записывает данные value в датчик, по адресу reg_addr.
-        bytes_count - кол-во записываемых данных"""
-        byte_order = self._get_byteorder_as_str()[0]
-        return self.adapter.write_register(self.address, reg_addr, value, bytes_count, byte_order)
-
-    def get_shunt_voltage(self) -> float:
-        """Возвращает напряжение на шунте в Вольтах"""
-        # DC ACCURACY:  ADC basic resolution: 12 bit;    Shunt voltage, 1 LSB step size: 10 μV
-        reg_raw = self._read_register(0x01, 2)
-        return 1E-5 * self.unpack("h", reg_raw)[0]
-
-    def get_voltage(self) -> tuple:
-        """Возвращает входное измеряемое напряжение, флаг готовности данных, флаг математического переполнения (OVF).
-        Флаг математического переполнения (OVF) устанавливается, когда расчеты мощности или тока выходят за допустимые
-        пределы. Это указывает на то, что данные о токе и мощности могут быть бессмысленными!"""
-        # DC ACCURACY:  ADC basic resolution: 12 bit;    Bus voltage, 1 LSB step size: 4 mV
-        reg_raw = self.unpack("h", self._read_register(0x02, 2))[0]
-        return 0.004 * (reg_raw >> 3), bool(reg_raw & 0x02), bool(reg_raw & 0x01)
 
     def get_power(self):
         reg_raw = self._read_register(0x03, 2)[0]
