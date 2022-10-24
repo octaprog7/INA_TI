@@ -76,6 +76,7 @@ class INA219Simple(InaBase):
         This indicates that current and power data may be meaningless!"""
         # DC ACCURACY:  ADC basic resolution: 12 bit;    Bus voltage, 1 LSB step size: 4 mV
         reg_raw = self.unpack("h", self._read_register(0x02, 2))[0]
+        # print(f"reg_raw: {hex(reg_raw)}")
         #           voltage             data ready flag         math overflow flag
         return 0.004 * (reg_raw >> 3), bool(reg_raw & 0x02), bool(reg_raw & 0x01)
 
@@ -142,13 +143,15 @@ class INA219(INA219Simple, Iterator):
 
     # BaseSensor
 
-    def get_power(self):
-        reg_raw = self._read_register(0x03, 2)[0]
-        ...
+    def get_power(self) -> float:
+        lsb = 0
+        reg_raw = self._read_register(0x03, 2)
+        return lsb * self.unpack("e", reg_raw)[0]
 
-    def get_current(self):
-        reg_raw = self._read_register(0x04, 2)[0]
-        ...
+    def get_current(self) -> float:
+        lsb = 0
+        reg_raw = self._read_register(0x04, 2)
+        return lsb * self.unpack("h", reg_raw)[0]
 
     def get_id(self):
         return None
