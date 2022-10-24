@@ -17,16 +17,10 @@ if __name__ == '__main__':
     i2c = I2C(id=1, freq=400_000)  # on Arduino Nano RP2040 Connect tested
     adaptor = I2cAdapter(i2c)
     # bme - sensor
-    ina219 = ina_ti.INA219(adaptor)
-    conf = ina219.get_config()
-    print(f"chip raw config: {hex(conf)}")
-    print(f"chip config:")
-    print(f"\tcontinuous mode: {ina219.continuous_mode}")
-    print(f"\tshunt voltage: {ina219.shunt_voltage}")
-    print(f"\tbus voltage: {ina219.bus_voltage}")
+    ina219 = ina_ti.INA219Simple(adaptor)
+    print(f"\tshunt voltage: {ina219.get_shunt_voltage()}")
+    print(f"\tbus voltage: {ina219.get_voltage()}")
     #
-    print(f"bus voltage range: {32 if ina219.bus_voltage_range else 16} V")
-
     while True:
         shunt_v = ina219.get_shunt_voltage()
         t = ina219.get_voltage()
