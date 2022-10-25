@@ -12,8 +12,6 @@ where: I - current in Amperes; R - resistance in ohms"""
 import math
 from sensor_pack import bus_service
 from sensor_pack.base_sensor import Device, Iterator, check_value
-# from sensor_pack import bitfield
-# import struct
 # import array
 
 
@@ -221,5 +219,7 @@ class INA219(INA219Simple, Iterator):
     def __iter__(self):
         return self
 
-    def __next__(self):
-        raise NotImplementedError
+    def __next__(self) -> tuple:
+        """Возвращает измеренные значения. кортеж, число.
+        Return measured values. tuple, digit"""
+        return self.get_voltage(), self.get_shunt_voltage()
