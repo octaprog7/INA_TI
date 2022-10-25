@@ -9,8 +9,9 @@ Attention! for long-term continuous operation of the current shunt, do not allow
 dissipated power to be allocated on it!!
 The power dissipated on any resistance (direct current) is calculated by the formula: P=I^2*R
 where: I - current in Amperes; R - resistance in ohms"""
+import math
 from sensor_pack import bus_service
-from sensor_pack.base_sensor import BaseSensor, Device, Iterator, check_value
+from sensor_pack.base_sensor import Device, Iterator, check_value
 # from sensor_pack import bitfield
 # import struct
 # import array
@@ -83,8 +84,9 @@ class INA219Simple(InaBase):
 
 class INA219(INA219Simple, Iterator):
     """Class for work with TI INA219 sensor"""
-    def __init__(self, adapter: bus_service.BusAdapter, address=0x40):
-        """shunt_resistance - сопротивление шунта, [Ом]"""
+    def __init__(self, adapter: bus_service.BusAdapter, address=0x40, shunt_resistance: float = 0.1):
+        """shunt_resistance - сопротивление шунта, [Ом].
+        shunt_resistance - shunt resistance, [Ohm]"""
         super().__init__(adapter, address)
         #
         self.bus_voltage_range = True  # False - 16 V; True - 32 V
@@ -102,7 +104,66 @@ class INA219(INA219Simple, Iterator):
         self._current_adc_resolution = 3
         # разрешение/усреднение АЦП входного изменяемого напряж. 12 bit. Conversion time: 532 μs
         self._voltage_adc_resolution = 3
+        # dont set shunt_resistance to zero.zero and below zero!
+        self._shunt_res = shunt_resistance
+        self._lsb_current_reg = 0   # for calibrate method
+        self._lsb_power_reg = 0     # for calibrate method
 
+    def _get_calibr_reg(self) -> int:
+        """Get calibration register value"""
+        reg_raw = self._read_register(0x05, 2)
+        val = self.unpack("h", reg_raw)[0]
+        return val >> 1     # drop FS0 bit. Note that bit FS0 is not used in the calculation!
+
+    def _set_calibr_reg(self, value: int):
+        """Set calibration register value"""
+        self._write_register(0x05, value << 1, 2)
+
+    def _calc(self, max_expected_current: float) -> tuple:
+        """Вычисляет и возвращает содержимое калибровочного регистра и значения наименее значимых битов
+        регистров тока и мощности.
+        max_expected_current - наибольший ожидаемый ток через токовый шунт, Ампер
+        shunt_resistance - сопротивление шунта, Ом
+        -------------------------------
+        Calculates and returns the contents of the calibration register and the values of the least significant bits
+        of the current and power registers.
+        max_expected_current - maximum expected current through the current shunt, Ampere
+        shunt_resistance - shunt resistance, Ohm"""
+        lsb_current_reg = max_expected_current / 2 ** 15
+        lsb_power_reg = 20 * lsb_current_reg
+        calibr_reg = int(math.trunc(0.04096 / (lsb_current_reg * self._shunt_res)))
+        return calibr_reg, lsb_current_reg, lsb_power_reg
+
+    def calibrate(self, max_expected_current: float) -> int:
+        """Производит расчеты и запись значения в регистр калибровки.
+        Performs calculations and writes the value to the calibration register."""
+        calibr_reg, self._lsb_current_reg, self._lsb_power_reg = self._calc(max_expected_current)
+        self._set_calibr_reg(calibr_reg)
+        return calibr_reg
+
+    @property
+    def shunt_resistance(self):
+        """Возвращает сопротивление токового шунта в Омах.
+        Returns the resistance of the current shunt in ohms."""
+        return self._shunt_res
+
+    @property
+    def current_lsb(self):
+        """Возвращает вес наименьшего разряда в регистре тока, Ампер.
+        Returns the weight of the LSB in the current register, Ampere"""
+        return self._lsb_current_reg
+
+    @property
+    def power_lsb(self):
+        """Возвращает вес наименьшего разряда в регистре мощности, Ватт.
+        Returns the weight of LSB in the power register, in watts."""
+        return self._lsb_power_reg
+
+    # value     range, mV
+    # 0         ±40 mV
+    # 1         ±80 mV
+    # 2         ±160 mV
+    # 3         ±320 mV     default
     @property
     def current_shunt_voltage_range(self):
         return self._current_shunt_voltage_range
@@ -144,14 +205,12 @@ class INA219(INA219Simple, Iterator):
     # BaseSensor
 
     def get_power(self) -> float:
-        lsb = 0
         reg_raw = self._read_register(0x03, 2)
-        return lsb * self.unpack("e", reg_raw)[0]
+        return self._lsb_power_reg * self.unpack("e", reg_raw)[0]
 
     def get_current(self) -> float:
-        lsb = 0
         reg_raw = self._read_register(0x04, 2)
-        return lsb * self.unpack("h", reg_raw)[0]
+        return self._lsb_current_reg * self.unpack("h", reg_raw)[0]
 
     def get_id(self):
         return None
