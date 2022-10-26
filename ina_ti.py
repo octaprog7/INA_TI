@@ -106,6 +106,15 @@ class INA219(INA219Simple, Iterator):
         self._shunt_res = shunt_resistance
         self._lsb_current_reg = 0   # for calibrate method
         self._lsb_power_reg = 0     # for calibrate method
+        self._maximum_current = 0   # from _calc method
+
+    @staticmethod
+    def _shunt_voltage_range_to_volt(shunt_voltage_range: int):
+        """Преобразует индекс диапазона напряжения токового шунта в напряжение, Вольт.
+        Converts the current shunt voltage range index to voltage, Volts."""
+        index = check_value(shunt_voltage_range, range(4),
+                            f"Invalid current shunt voltage range: {shunt_voltage_range}")
+        return 0.040 * (2 ** index)
 
     def _get_calibr_reg(self) -> int:
         """Get calibration register value"""
@@ -117,25 +126,38 @@ class INA219(INA219Simple, Iterator):
         """Set calibration register value"""
         self._write_register(0x05, value << 1, 2)
 
-    def _calc(self, max_expected_current: float) -> tuple:
+    def _calc(self, max_expected_current: float, shunt_resistance: float) -> tuple:
         """Вычисляет и возвращает содержимое калибровочного регистра и значения наименее значимых битов
-        регистров тока и мощности.
+        регистров тока и мощности, наибольший измеряемый ток через шунт, А.
         max_expected_current - наибольший ожидаемый ток через токовый шунт, Ампер
         shunt_resistance - сопротивление шунта, Ом
-        -------------------------------
+        -------------------------------------------------------------------------
         Calculates and returns the contents of the calibration register and the values of the least significant bits
         of the current and power registers.
         max_expected_current - maximum expected current through the current shunt, Ampere
         shunt_resistance - shunt resistance, Ohm"""
-        lsb_current_reg = max_expected_current / 2 ** 15
-        lsb_power_reg = 20 * lsb_current_reg
-        calibr_reg = int(math.trunc(0.04096 / (lsb_current_reg * self._shunt_res)))
-        return calibr_reg, lsb_current_reg, lsb_power_reg
+
+        # расчет максимального измеряемого тока, Ампер
+        maximum_current = INA219._shunt_voltage_range_to_volt(self._current_shunt_voltage_range) / shunt_resistance
+        # Вычисляю возможный диапазон весов младших разрядов (мин. = 15 бит, макс. = 12 бит)
+        lsb_min = max_expected_current / (2 ** 15 - 1)  # uA/bit
+        lsb_max = max_expected_current / 2 ** 12        # uA/bit
+        # выбор lsb из диапазона lsb_min..lsb_max (желательно круглое число, близкое к lsb_min)
+        lsb_current = min(lsb_min, lsb_max)
+        # вычисляю значение для регистра калибровки
+        cal_val = math.trunc(0.04096 / (lsb_current * shunt_resistance))
+        # Calculate the power LSB
+        lsb_power = 20 * lsb_current    # mW
+        # Коэффициенты для преобразования сырых значений тока/мощности.
+
+        #
+        return cal_val, lsb_current, lsb_power, maximum_current
 
     def calibrate(self, max_expected_current: float) -> int:
-        """Производит расчеты и запись значения в регистр калибровки.
-        Performs calculations and writes the value to the calibration register."""
-        calibr_reg, self._lsb_current_reg, self._lsb_power_reg = self._calc(max_expected_current)
+        """Производит расчеты и запись значения в регистр калибровки. Вызови _calc до вызова этого метода!!!
+        Performs calculations and writes the value to the calibration register.
+        Call _calc before calling this method!!!"""
+        calibr_reg, self._lsb_current_reg, self._lsb_power_reg, max_curr = self._calc(max_expected_current, self._shunt_res)
         self._set_calibr_reg(calibr_reg)
         return calibr_reg
 
