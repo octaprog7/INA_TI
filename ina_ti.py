@@ -127,13 +127,14 @@ class INA219(INA219Simple, Iterator):
         self._write_register(0x05, value << 1, 2)
 
     def _calc(self, max_expected_current: float, shunt_resistance: float) -> tuple:
-        """Вычисляет и возвращает содержимое калибровочного регистра и значения наименее значимых битов
-        регистров тока и мощности, наибольший измеряемый ток через шунт, А.
+        """Вычисляет и возвращает содержимое калибровочного регистра, значения наименее значимых битов
+        регистров тока и мощности, наибольший измеряемый ток через шунт в А, наибольшую измеряемую мощность
         max_expected_current - наибольший ожидаемый ток через токовый шунт, Ампер
         shunt_resistance - сопротивление шунта, Ом
         -------------------------------------------------------------------------
-        Calculates and returns the contents of the calibration register and the values of the least significant bits
-        of the current and power registers.
+        Calculates and returns the contents of the calibration register, the values of the least significant bits of
+        the current and power registers, the largest measurable current through the shunt in Amps,
+        the largest measurable power in watts.
         max_expected_current - maximum expected current through the current shunt, Ampere
         shunt_resistance - shunt resistance, Ohm"""
 
@@ -143,15 +144,34 @@ class INA219(INA219Simple, Iterator):
         lsb_min = max_expected_current / (2 ** 15 - 1)  # uA/bit
         lsb_max = max_expected_current / 2 ** 12        # uA/bit
         # выбор lsb из диапазона lsb_min..lsb_max (желательно круглое число, близкое к lsb_min)
-        lsb_current = min(lsb_min, lsb_max)
+        k = 1+(lsb_min // 10)
+        lsb_current = min(10 * k, lsb_max)
         # вычисляю значение для регистра калибровки
         cal_val = math.trunc(0.04096 / (lsb_current * shunt_resistance))
         # Calculate the power LSB
         lsb_power = 20 * lsb_current    # mW
-        # Коэффициенты для преобразования сырых значений тока/мощности.
+        # Вычисляю максимальные значения тока и напряжения шунта до переполнения!
+        max_current = (2 ** 15 - 1) * lsb_current   # before overflow
 
-        #
-        return cal_val, lsb_current, lsb_power, maximum_current
+        if max_current >= maximum_current:
+            max_current_before_ovf = maximum_current
+        else:
+            max_current_before_ovf = max_current
+
+        # max_current_before_ovf = min(maximum_current, max_expected_current)
+        max_shunt_voltage = max_current_before_ovf * shunt_resistance
+        shunt_voltage_limit = 0.32
+
+        if max_shunt_voltage >= shunt_voltage_limit:
+            max_shunt_voltage_before_ovf = shunt_voltage_limit
+        else:
+            max_shunt_voltage_before_ovf = max_shunt_voltage
+
+        # Вычисляю максимальную мощность, Вт
+        vbus_max = 25   # в документации 26. Минус 1 вольт для запаса (Senses Bus Voltages from 0 to 26 V)
+        max_power = max_current_before_ovf * vbus_max
+
+        return cal_val, lsb_current, lsb_power, maximum_current, max_power
 
     def calibrate(self, max_expected_current: float) -> int:
         """Производит расчеты и запись значения в регистр калибровки. Вызови _calc до вызова этого метода!!!
