@@ -15,7 +15,8 @@ from sensor_pack.base_sensor import Device, Iterator, check_value
 
 
 def get_exponent(value: float) -> int:
-    """Возвращает десятичную степень числа"""
+    """Возвращает десятичную степень числа.
+    Returns the decimal power of a number"""
     return int(math.floor(math.log10(abs(value)))) if 0 != value else 0
 
 
@@ -40,9 +41,11 @@ class InaBase(Device):
         return self.adapter.write_register(self.address, reg_addr, value, bytes_count, byte_order)
 
     def _set_raw_cfg(self, value: int) -> int:
+        """Set raw configuration in register"""
         return self._write_register(0x00, value, 2)
 
     def _get_raw_cfg(self) -> int:
+        """Get raw configuration from register"""
         b = self._read_register(0x00, 2)
         return self.unpack("H", b)[0]
 
@@ -94,7 +97,7 @@ class INA219(INA219Simple, Iterator):
     _shunt_voltage_limit = 0.32
     # Предел измеряемого напряжения! И неважно, что чип измеряет до 32 Вольт!
     # В документации 26. Минус 1 вольт для запаса (Senses Bus Voltages from 0 to 26 V)
-    vbus_max = 25
+    _vbus_max = 25
 
     def __init__(self, adapter: bus_service.BusAdapter, address=0x40, shunt_resistance: float = 0.1):
         """shunt_resistance - сопротивление шунта, [Ом].
@@ -121,7 +124,10 @@ class INA219(INA219Simple, Iterator):
         self._lsb_current_reg = 0  # for calibrate method
         self._lsb_power_reg = 0  # for calibrate method
         self._maximum_current = 0  # from _calc method
+        self._maximum_power = 0  # from _calc method
         self.max_shunt_voltage_before_ovf = 0
+        #
+        self._calc(max_expected_current=3.0, shunt_resistance=shunt_resistance)
 
     @staticmethod
     def _shunt_voltage_range_to_volt(shunt_voltage_range: int):
@@ -183,7 +189,7 @@ class INA219(INA219Simple, Iterator):
 
         self.max_shunt_voltage_before_ovf = max_shunt_voltage_before_ovf
         # Вычисляю максимальную мощность, Вт
-        max_power = max_current_before_ovf * INA219.vbus_max
+        max_power = max_current_before_ovf * INA219._vbus_max
 
         return cal_val, lsb_current, lsb_power, maximum_current, max_power
 
@@ -191,7 +197,8 @@ class INA219(INA219Simple, Iterator):
         """Производит расчеты и запись значения в регистр калибровки. Вызови _calc до вызова этого метода!!!
         Performs calculations and writes the value to the calibration register.
         Call _calc before calling this method!!!"""
-        calibr_reg, self._lsb_current_reg, self._lsb_power_reg, max_curr, max_pwr = self._calc(max_expected_current, self._shunt_res)
+        calibr_reg, self._lsb_current_reg, self._lsb_power_reg, self._maximum_current, self._maximum_power = \
+            self._calc(max_expected_current, self._shunt_res)
         self._set_calibr_reg(calibr_reg)
         if 0 >= self.max_shunt_voltage_before_ovf:
             raise ValueError("Invalid max_shunt_voltage_before_ovf value. Call _calc method before calibrate!")
