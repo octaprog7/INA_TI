@@ -38,6 +38,6 @@ if __name__ == '__main__':
     while True:
         shunt_v = ina219.get_shunt_voltage()
         t = ina219.get_voltage()
-        # print(f"Shunt voltage: {shunt_v} V; Bus voltage: {t[0]} V; data ready flag: {t[1]}; overflow flag: {t[2]}")
+        print(f"Shunt voltage: {shunt_v} V; Bus voltage: {t[0]} V; data ready flag: {t[1]}; overflow flag: {t[2]}")
         print(f"Bus voltage: {t[0]} V; Current: {ina219.get_current()} Amper; Power: {ina219.get_power()} Watt")
         utime.sleep_ms(333)
