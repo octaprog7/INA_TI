@@ -191,10 +191,10 @@ class INA219(INA219Simple, Iterator):
         """Производит расчеты и запись значения в регистр калибровки. Вызови _calc до вызова этого метода!!!
         Performs calculations and writes the value to the calibration register.
         Call _calc before calling this method!!!"""
-        if 0 >= self.max_shunt_voltage_before_ovf:
-            raise ValueError("Invalid max_shunt_voltage_before_ovf value. Call _calc method before calibrate!")
         calibr_reg, self._lsb_current_reg, self._lsb_power_reg, max_curr, max_pwr = self._calc(max_expected_current, self._shunt_res)
         self._set_calibr_reg(calibr_reg)
+        if 0 >= self.max_shunt_voltage_before_ovf:
+            raise ValueError("Invalid max_shunt_voltage_before_ovf value. Call _calc method before calibrate!")
         # автоустановка напряжения на шунте! self.max_shunt_voltage_before_ovf
         for sh_v_rng in range(4):
             if self._shunt_voltage_range_to_volt(sh_v_rng) >= self.max_shunt_voltage_before_ovf:
@@ -269,7 +269,7 @@ class INA219(INA219Simple, Iterator):
 
     def get_power(self) -> float:
         reg_raw = self._read_register(0x03, 2)
-        return self._lsb_power_reg * self.unpack("H", reg_raw)[0]
+        return self._lsb_power_reg * self.unpack("h", reg_raw)[0]
 
     def get_current(self) -> float:
         reg_raw = self._read_register(0x04, 2)
