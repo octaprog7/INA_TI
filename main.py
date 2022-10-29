@@ -21,8 +21,19 @@ if __name__ == '__main__':
     print(f"\tshunt voltage: {ina219.get_shunt_voltage()}")
     print(f"\tbus voltage: {ina219.get_voltage()}")
     #
+    # while True:
+    #    shunt_v = ina219.get_shunt_voltage()
+    #    t = ina219.get_voltage()
+    #    print(f"Shunt voltage: {shunt_v} V; Bus voltage: {t[0]} V; data ready flag: {t[1]}; overflow flag: {t[2]}")
+    #    utime.sleep_ms(1000)
+    del ina219
+    ina219 = ina_ti.INA219(adapter=adaptor, address=0x40, shunt_resistance=0.1)
+    ina219.bus_voltage_range = False    # 16 V
+    ina219.shunt_voltage = False        # skip meas shunt voltage
+    ina219.calibrate(max_expected_current=1.0)
+    #
     while True:
         shunt_v = ina219.get_shunt_voltage()
         t = ina219.get_voltage()
         print(f"Shunt voltage: {shunt_v} V; Bus voltage: {t[0]} V; data ready flag: {t[1]}; overflow flag: {t[2]}")
-        utime.sleep_ms(1000)
+        utime.sleep_ms(333)
