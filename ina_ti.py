@@ -12,14 +12,19 @@ where: I - current in Amperes; R - resistance in ohms"""
 import math
 from sensor_pack import bus_service
 from sensor_pack.base_sensor import Device, Iterator, check_value
-# import array
+
+
+def get_exponent(value: float) -> int:
+    """Возвращает десятичную степень числа"""
+    return int(math.floor(math.log10(abs(value)))) if 0 != value else 0
 
 
 class InaBase(Device):
     """Base class for INA current/voltage monitor"""
+
     def __init__(self, adapter: bus_service.BusAdapter, address):
         """shunt_resistance - сопротивление шунта, [Ом]"""
-        super().__init__(adapter, address, True)    # All data bytes are transmitted most significant byte first.
+        super().__init__(adapter, address, True)  # All data bytes are transmitted most significant byte first.
 
     def _read_register(self, reg_addr, bytes_count=2) -> bytes:
         """считывает из регистра датчика значение.
@@ -27,6 +32,7 @@ class InaBase(Device):
         return self.adapter.read_register(self.address, reg_addr, bytes_count)
 
         # BaseSensor
+
     def _write_register(self, reg_addr, value: [int, bytes, bytearray], bytes_count=2) -> int:
         """записывает данные value в датчик, по адресу reg_addr.
         bytes_count - кол-во записываемых данных"""
@@ -51,9 +57,10 @@ class INA219Simple(InaBase):
     Input voltage measurement range: 0-26 Volts.
     Voltage measurement range on the current measuring shunt: ±320 millivolts.
     There are no settings!"""
+
     def __init__(self, adapter: bus_service.BusAdapter, address=0x40):
         super().__init__(adapter, address)
-        self._set_raw_cfg(0b0011_1001_1001_1111)    # 0x399F    default setting, simple reading two voltages
+        self._set_raw_cfg(0b0011_1001_1001_1111)  # 0x399F    default setting, simple reading two voltages
 
     def get_shunt_voltage(self) -> float:
         """Возвращает напряжение на шунте в Вольтах. Чтобы вычислить ток через шунт, нужно это напряжение поделить
@@ -82,21 +89,28 @@ class INA219Simple(InaBase):
 
 class INA219(INA219Simple, Iterator):
     """Class for work with TI INA219 sensor"""
+
+    # предел напряжения на шунте, Вольт
+    _shunt_voltage_limit = 0.32
+    # Предел измеряемого напряжения! И неважно, что чип измеряет до 32 Вольт!
+    # В документации 26. Минус 1 вольт для запаса (Senses Bus Voltages from 0 to 26 V)
+    vbus_max = 25
+
     def __init__(self, adapter: bus_service.BusAdapter, address=0x40, shunt_resistance: float = 0.1):
         """shunt_resistance - сопротивление шунта, [Ом].
         shunt_resistance - shunt resistance, [Ohm]"""
         super().__init__(adapter, address)
         #
         self.bus_voltage_range = True  # False - 16 V; True - 32 V
-        self.continuous_mode = True    # непрерывный или однократный режимы работы
-        self.bus_voltage = True        # измерение напряжения на шине, режимы работы
-        self.shunt_voltage = True      # измерение тока, путем измерения напряжения на шунте, режимы работы
+        self.continuous_mode = True  # непрерывный или однократный режимы работы
+        self.bus_voltage = True  # измерение напряжения на шине, режимы работы
+        self.shunt_voltage = True  # измерение тока, путем измерения напряжения на шунте, режимы работы
         # value     range, mV
         # 0         ±40 mV
         # 1         ±80 mV
         # 2         ±160 mV
         # 3         ±320 mV     default
-        self._current_shunt_voltage_range = 3   # диапазон напряжения, измеряемого на токовом шунте      0..3
+        self._current_shunt_voltage_range = 3  # диапазон напряжения, измеряемого на токовом шунте      0..3
         # делаю "недоступным" для пользователя. это лишние настройки!
         # разрешение/усреднение АЦП напряж. на токовом шунте. 12 bit. Conversion time: 532 μs
         self._current_adc_resolution = 3
@@ -104,9 +118,10 @@ class INA219(INA219Simple, Iterator):
         self._voltage_adc_resolution = 3
         # dont set shunt_resistance to zero.zero and below zero!
         self._shunt_res = shunt_resistance
-        self._lsb_current_reg = 0   # for calibrate method
-        self._lsb_power_reg = 0     # for calibrate method
-        self._maximum_current = 0   # from _calc method
+        self._lsb_current_reg = 0  # for calibrate method
+        self._lsb_power_reg = 0  # for calibrate method
+        self._maximum_current = 0  # from _calc method
+        self.max_shunt_voltage_before_ovf = 0
 
     @staticmethod
     def _shunt_voltage_range_to_volt(shunt_voltage_range: int):
@@ -119,12 +134,12 @@ class INA219(INA219Simple, Iterator):
     def _get_calibr_reg(self) -> int:
         """Get calibration register value"""
         reg_raw = self._read_register(0x05, 2)
-        val = self.unpack("h", reg_raw)[0]
-        return val >> 1     # drop FS0 bit. Note that bit FS0 is not used in the calculation!
+        return self.unpack("h", reg_raw)[0]     # >> 1# drop FS0 bit. Note that bit FS0 is not used in the calculation!
 
     def _set_calibr_reg(self, value: int):
         """Set calibration register value"""
-        self._write_register(0x05, value << 1, 2)
+        self._write_register(0x05, value, 2)
+        # self._write_register(0x05, value << 1, 2)
 
     def _calc(self, max_expected_current: float, shunt_resistance: float) -> tuple:
         """Вычисляет и возвращает содержимое калибровочного регистра, значения наименее значимых битов
@@ -142,34 +157,33 @@ class INA219(INA219Simple, Iterator):
         maximum_current = INA219._shunt_voltage_range_to_volt(self._current_shunt_voltage_range) / shunt_resistance
         # Вычисляю возможный диапазон весов младших разрядов (мин. = 15 бит, макс. = 12 бит)
         lsb_min = max_expected_current / (2 ** 15 - 1)  # uA/bit
-        lsb_max = max_expected_current / 2 ** 12        # uA/bit
+        lsb_max = max_expected_current / 2 ** 12  # uA/bit
         # выбор lsb из диапазона lsb_min..lsb_max (желательно круглое число, близкое к lsb_min)
-        k = 1+(lsb_min // 10)
-        lsb_current = min(10 * k, lsb_max)
+        k = 10**(1 + get_exponent(lsb_min))     # округление (в большую сторону) до 10 с учетом порядка/степени числа
+        lsb_current = min(k, lsb_max)
+        # print(f"DBG; lsb_min: {lsb_min}; lsb_max: {lsb_max}; lsb_current: {lsb_current}")
         # вычисляю значение для регистра калибровки
         cal_val = math.trunc(0.04096 / (lsb_current * shunt_resistance))
         # Calculate the power LSB
-        lsb_power = 20 * lsb_current    # mW
+        lsb_power = 20 * lsb_current  # mW
         # Вычисляю максимальные значения тока и напряжения шунта до переполнения!
-        max_current = (2 ** 15 - 1) * lsb_current   # before overflow
+        max_current = lsb_current * (2 ** 15 - 1)  # before overflow
 
         if max_current >= maximum_current:
             max_current_before_ovf = maximum_current
         else:
             max_current_before_ovf = max_current
 
-        # max_current_before_ovf = min(maximum_current, max_expected_current)
         max_shunt_voltage = max_current_before_ovf * shunt_resistance
-        shunt_voltage_limit = 0.32
 
-        if max_shunt_voltage >= shunt_voltage_limit:
-            max_shunt_voltage_before_ovf = shunt_voltage_limit
+        if max_shunt_voltage >= INA219._shunt_voltage_limit:
+            max_shunt_voltage_before_ovf = INA219._shunt_voltage_limit
         else:
             max_shunt_voltage_before_ovf = max_shunt_voltage
 
+        self.max_shunt_voltage_before_ovf = max_shunt_voltage_before_ovf
         # Вычисляю максимальную мощность, Вт
-        vbus_max = 25   # в документации 26. Минус 1 вольт для запаса (Senses Bus Voltages from 0 to 26 V)
-        max_power = max_current_before_ovf * vbus_max
+        max_power = max_current_before_ovf * INA219.vbus_max
 
         return cal_val, lsb_current, lsb_power, maximum_current, max_power
 
@@ -177,8 +191,17 @@ class INA219(INA219Simple, Iterator):
         """Производит расчеты и запись значения в регистр калибровки. Вызови _calc до вызова этого метода!!!
         Performs calculations and writes the value to the calibration register.
         Call _calc before calling this method!!!"""
-        calibr_reg, self._lsb_current_reg, self._lsb_power_reg, max_curr = self._calc(max_expected_current, self._shunt_res)
+        if 0 >= self.max_shunt_voltage_before_ovf:
+            raise ValueError("Invalid max_shunt_voltage_before_ovf value. Call _calc method before calibrate!")
+        calibr_reg, self._lsb_current_reg, self._lsb_power_reg, max_curr, max_pwr = self._calc(max_expected_current, self._shunt_res)
         self._set_calibr_reg(calibr_reg)
+        # автоустановка напряжения на шунте! self.max_shunt_voltage_before_ovf
+        for sh_v_rng in range(4):
+            if self._shunt_voltage_range_to_volt(sh_v_rng) >= self.max_shunt_voltage_before_ovf:
+                self.current_shunt_voltage_range = sh_v_rng
+                break
+        else:
+            raise ValueError("Shunt voltage range autoset failed!")
         return calibr_reg
 
     @property
@@ -215,14 +238,14 @@ class INA219(INA219Simple, Iterator):
 
     def set_config(self) -> int:
         """Настраивает датчик в соответствии с настройками"""
-        raw_cfg = int(self.bus_voltage_range) << 13     # Bus Voltage Range bit
-        raw_cfg |= self._current_shunt_voltage_range << 11   # PGA (Shunt Voltage Only)
-        raw_cfg |= self._voltage_adc_resolution << 7         # BADC Bus ADC Resolution/Averaging
-        raw_cfg |= self._current_adc_resolution << 3         # SADC Shunt ADC Resolution/Averaging
+        raw_cfg = int(self.bus_voltage_range) << 13  # Bus Voltage Range bit
+        raw_cfg |= self._current_shunt_voltage_range << 11  # PGA (Shunt Voltage Only)
+        raw_cfg |= self._voltage_adc_resolution << 7  # BADC Bus ADC Resolution/Averaging
+        raw_cfg |= self._current_adc_resolution << 3  # SADC Shunt ADC Resolution/Averaging
         # mode
-        raw_cfg |= int(self.continuous_mode) << 2   # continuous
-        raw_cfg |= int(self.bus_voltage) << 1   # Bus voltage
-        raw_cfg |= int(self.shunt_voltage)      # Shunt voltage
+        raw_cfg |= int(self.continuous_mode) << 2  # continuous
+        raw_cfg |= int(self.bus_voltage) << 1  # Bus voltage
+        raw_cfg |= int(self.shunt_voltage)  # Shunt voltage
         #
         return self._set_raw_cfg(raw_cfg)
 
@@ -230,9 +253,9 @@ class INA219(INA219Simple, Iterator):
         """Считывает настройками датчика по шине"""
         raw_cfg = self._get_raw_cfg()
         # mode
-        self.shunt_voltage = bool(raw_cfg & 0x0001)     # измерять напряжение на токовом шунте
-        self.bus_voltage = bool(raw_cfg & 0x0002)       # измерять напряжение на шине
-        self.continuous_mode = bool(raw_cfg & 0x0004)   # непрерывный режим измерений
+        self.shunt_voltage = bool(raw_cfg & 0x0001)  # измерять напряжение на токовом шунте
+        self.bus_voltage = bool(raw_cfg & 0x0002)  # измерять напряжение на шине
+        self.continuous_mode = bool(raw_cfg & 0x0004)  # непрерывный режим измерений
         #
         self._current_adc_resolution = (raw_cfg & 0b0000_0000_0111_1000) >> 3
         self._voltage_adc_resolution = (raw_cfg & 0b0000_0111_1000_0000) >> 7
@@ -246,7 +269,7 @@ class INA219(INA219Simple, Iterator):
 
     def get_power(self) -> float:
         reg_raw = self._read_register(0x03, 2)
-        return self._lsb_power_reg * self.unpack("e", reg_raw)[0]
+        return self._lsb_power_reg * self.unpack("H", reg_raw)[0]
 
     def get_current(self) -> float:
         reg_raw = self._read_register(0x04, 2)
