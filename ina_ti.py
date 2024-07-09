@@ -2,16 +2,16 @@
 
 Внимание! для долговременной непрерывной работы токового шунта, не допускайте выделения на нем более половины(!) от его
 максимальной рассеиваемой мощности!
-Мощность, выделяемая на любом сопротивлении (постоянный ток), рассчитывается по формуле: P=I^2*R
+Мощность, выделяемая на любом сопротивлении (постоянный ток), рассчитывается по формуле: P=I**2 * R
 где: I - ток в Амперах; R - сопротивление в Омах.
 
 Attention! for long-term continuous operation of the current shunt, do not allow more than half(!) of its maximum
 dissipated power to be allocated on it!!
-The power dissipated on any resistance (direct current) is calculated by the formula: P=I^2*R
+The power dissipated on any resistance (direct current) is calculated by the formula: P=I**2 * R
 where: I - current in Amperes; R - resistance in ohms"""
 import math
 from sensor_pack_2 import bus_service
-from sensor_pack_2.base_sensor import Device, Iterator, check_value
+from sensor_pack_2.base_sensor import DeviceEx, IBaseSensorEx, Iterator, check_value
 
 
 def get_exponent(value: float) -> int:
@@ -20,39 +20,47 @@ def get_exponent(value: float) -> int:
     return int(math.floor(math.log10(abs(value)))) if 0 != value else 0
 
 
-class InaBase(Device):
+def _get_sadc_field(config: int) -> int:
+    """Возвращает поле SADC (токовый шунт) регистра конфигурации"""
+    return (0x038 & config) >> 3
+
+
+class InaBase(DeviceEx, IBaseSensorEx):
     """Base class for INA current/voltage monitor"""
 
     def __init__(self, adapter: bus_service.BusAdapter, address):
-        """shunt_resistance - сопротивление шунта, [Ом]"""
+        """"""
+        check_value(address, range(0x40, 0x50), f"Неверный адрес устройства: {address}")
         super().__init__(adapter, address, True)  # All data bytes are transmitted most significant byte first.
 
-    def _read_register(self, reg_addr, bytes_count=2) -> bytes:
-        """считывает из регистра датчика значение.
-        bytes_count - размер значения в байтах"""
-        return self.adapter.read_register(self.address, reg_addr, bytes_count)
-
-        # BaseSensor
-
-    def _write_register(self, reg_addr, value: [int, bytes, bytearray], bytes_count=2) -> int:
-        """записывает данные value в датчик, по адресу reg_addr.
-        bytes_count - кол-во записываемых данных"""
-        byte_order = self._get_byteorder_as_str()[0]
-        return self.adapter.write_register(self.address, reg_addr, value, bytes_count, byte_order)
-
+    # BaseSensor
     def _set_raw_cfg(self, value: int) -> int:
-        """Set raw configuration in register"""
-        return self._write_register(0x00, value, 2)
+        """Установить сырую конфигурацию в регистре. Set raw configuration in register."""
+        return self.write_reg(0x00, value, 2)
 
     def _get_raw_cfg(self) -> int:
         """Get raw configuration from register"""
-        b = self._read_register(0x00, 2)
+        b = self.read_reg(0x00, 2)
         return self.unpack("H", b)[0]
 
+    def get_conversion_cycle_time(self) -> int:
+        """Возвращает время в мкс(!) преобразования сигнала в цифровой код и готовности его для чтения по шине!
+        Для текущих настроек датчика. При изменении настроек следует заново вызвать этот метод!"""
+        s_adc_field = _get_sadc_field(self._get_raw_cfg())    # выделяю поле SADC (токовый шунт)
+        # print(f"DBG:get_conversion_cycle_time: {s_adc_field}")
+        conv_time = 84, 148, 276, 532
+        if s_adc_field < 8:
+            s_adc_field &= 0x3  # 0..3
+            return conv_time[s_adc_field]
+        # 0x8..0xF
+        s_adc_field -= 0x08     # 0..7
+        coefficient = 2 ** s_adc_field
+        return 532 * coefficient
 
 class INA219Simple(InaBase):
     """Класс для работы с датчиком TI INA219 без какой либо настройки!
-    Диапазон измерения входного напряжения: 0-26 Вольт.
+    Диапазон измерения входного напряжения: 0..26 Вольт. Рекомендую 0..24 Вольта,
+    дополнительно защита от выбросов напряжения!!!
     Диапазон измерения напряжения на токоизмерительном шунте: ±320 милливольт.
     Никаких настроек нет!
     ---------------------
@@ -63,7 +71,7 @@ class INA219Simple(InaBase):
 
     def __init__(self, adapter: bus_service.BusAdapter, address=0x40):
         super().__init__(adapter, address)
-        self._set_raw_cfg(0b0011_1001_1001_1111)  # 0x399F    default setting, simple reading two voltages
+        self._set_raw_cfg(0b0011_1001_1001_1111)  # 0x399F    настройка по умолчанию, простое считывание двух напряжений
 
     def get_shunt_voltage(self) -> float:
         """Возвращает напряжение на шунте в Вольтах. Чтобы вычислить ток через шунт, нужно это напряжение поделить
@@ -71,7 +79,7 @@ class INA219Simple(InaBase):
         Returns the shunt voltage in Volts. To calculate the current through the shunt, you need to divide this voltage
         by the resistance of the shunt in ohms !!!"""
         # DC ACCURACY:  ADC basic resolution: 12 bit;    Shunt voltage, 1 LSB step size: 10 μV
-        reg_raw = self._read_register(0x01, 2)
+        reg_raw = self.read_reg(0x01, 2)
         return 1E-5 * self.unpack("h", reg_raw)[0]
 
     def get_voltage(self) -> tuple:
@@ -84,7 +92,7 @@ class INA219Simple(InaBase):
         The Math Overflow Flag (OVF) is set when power or current calculations are out of range.
         This indicates that current and power data may be meaningless!"""
         # DC ACCURACY:  ADC basic resolution: 12 bit;    Bus voltage, 1 LSB step size: 4 mV
-        reg_raw = self.unpack("h", self._read_register(0x02, 2))[0]
+        reg_raw = self.unpack("h", self.read_reg(0x02, 2))[0]
         # print(f"reg_raw: {hex(reg_raw)}")
         #           voltage             data ready flag         math overflow flag
         return 0.004 * (reg_raw >> 3), bool(reg_raw & 0x02), bool(reg_raw & 0x01)
@@ -156,9 +164,9 @@ class INA219(INA219Simple, Iterator):
         """Возвращает направление переключения входного делителя диапазона, вниз или вверх.
         Returns the switching direction of the input range divider, down or up."""
         switch_up = abs(value / hi_range_limit) > 0.95
-        switch_down = abs(value) < 0.85*abs(low_range_limit)
+        switch_down = abs(value) < 0.85 * abs(low_range_limit)
         if switch_up and switch_down:
-            raise ValueError(f"Invalid input parameters: {low_range_limit}; {hi_range_limit}")
+            raise ValueError(f"Неверные значения входных параметров: {low_range_limit}; {hi_range_limit}")
         return switch_up, switch_down
 
     def get_shunt_voltage(self) -> float:
@@ -196,12 +204,12 @@ class INA219(INA219Simple, Iterator):
 
     def _get_calibr_reg(self) -> int:
         """Get calibration register value"""
-        reg_raw = self._read_register(0x05, 2)
+        reg_raw = self.read_reg(0x05, 2)
         return self.unpack("h", reg_raw)[0]     # >> 1# drop FS0 bit. Note that bit FS0 is not used in the calculation!
 
     def _set_calibr_reg(self, value: int):
         """Set calibration register value"""
-        self._write_register(0x05, value, 2)
+        self.write_reg(0x05, value, 2)
         # self._write_register(0x05, value << 1, 2)
 
     def _calc(self, shunt_resistance: float, max_expected_current: float = None) -> tuple:
@@ -270,7 +278,7 @@ class INA219(INA219Simple, Iterator):
                 self.current_shunt_voltage_range = sh_v_rng
                 break
         else:
-            raise ValueError("Shunt voltage range autoset failed!")
+            raise ValueError("Не удалось выполнить автонастройку диапазона напряжения шунта!")
         return calibr_reg
 
     @property
@@ -291,22 +299,25 @@ class INA219(INA219Simple, Iterator):
         Returns the weight of LSB in the power register, in watts."""
         return self._lsb_power_reg
 
-    # value     range, mV
-    # 0         ±40 mV
-    # 1         ±80 mV
-    # 2         ±160 mV
-    # 3         ±320 mV     default
     @property
     def current_shunt_voltage_range(self):
+        """Возвращает установленный диапазон напряжения на шунте.
+        # value     range, mV
+        # 0         ±40 mV
+        # 1         ±80 mV
+        # 2         ±160 mV
+        # 3         ±320 mV     default"""
         return self._current_shunt_voltage_range
 
     @current_shunt_voltage_range.setter
     def current_shunt_voltage_range(self, value):
-        self._current_shunt_voltage_range = check_value(value, range(4),
-                                                        f"Invalid current shunt voltage range: {value}")
+        self._current_shunt_voltage_range = check_value(
+            value, range(4),f"Неверный диапазон текущего напряжения шунта: {value}")
 
     @property
     def auto_range(self):
+        """автоматический выбор диапазона измерения напряжения шины и тока через токовый шунт.
+        automatic selection of bus voltage and current measurement range via current shunt"""
         return self._auto_range
 
     @auto_range.setter
@@ -345,11 +356,11 @@ class INA219(INA219Simple, Iterator):
     # BaseSensor
 
     def get_power(self) -> float:
-        reg_raw = self._read_register(0x03, 2)
+        reg_raw = self.read_reg(0x03, 2)
         return self._lsb_power_reg * self.unpack("h", reg_raw)[0]
 
     def get_current(self) -> float:
-        reg_raw = self._read_register(0x04, 2)
+        reg_raw = self.read_reg(0x04, 2)
         return self._lsb_current_reg * self.unpack("h", reg_raw)[0]
 
     def soft_reset(self):

@@ -1,6 +1,7 @@
 import utime
+import sys
 from machine import I2C
-from sensor_pack.bus_service import I2cAdapter
+from sensor_pack_2.bus_service import I2cAdapter
 import ina_ti
 
 
@@ -21,12 +22,16 @@ if __name__ == '__main__':
     print(f"\tshunt voltage: {ina219.get_shunt_voltage()}")
     print(f"\tbus voltage: {ina219.get_voltage()}")
     #
-    # while True:
-    #    shunt_v = ina219.get_shunt_voltage()
-    #    t = ina219.get_voltage()
-    #    print(f"Shunt voltage: {shunt_v} V; Bus voltage: {t[0]} V; data ready flag: {t[1]}; overflow flag: {t[2]}")
-    #    utime.sleep_ms(1000)
+    wait_time_us = ina219.get_conversion_cycle_time()
+    print(f"wait_time_us: {wait_time_us} мкс.")
+    for _ in range(100):
+        shunt_v = ina219.get_shunt_voltage()
+        t = ina219.get_voltage()
+        print(f"Shunt voltage: {shunt_v} V; Bus voltage: {t[0]} V; data ready flag: {t[1]}; overflow flag: {t[2]}")
+        utime.sleep_us(wait_time_us)
     del ina219
+    
+    sys.exit(0)
     
     ina219 = ina_ti.INA219(adapter=adaptor, address=0x40, shunt_resistance=0.1)
     ina219.bus_voltage_range = False    # 16 V
@@ -34,7 +39,7 @@ if __name__ == '__main__':
     # ina219.current_shunt_voltage_range = 2		# 160 mV
     ina219.set_config()
     ina219.calibrate(max_expected_current=1.0)		# 1.0 A * 0.1 Ohm = 0.1 Volt max on shunt resistance!
-    #
+
     while True:
         shunt_v = ina219.get_shunt_voltage()
         t = ina219.get_voltage()
