@@ -19,6 +19,8 @@ if __name__ == '__main__':
     adaptor = I2cAdapter(i2c)
     # bme - sensor
     ina219 = ina_ti.INA219Simple(adaptor)
+    cfg = ina219.get_config()
+    print(f"config: {cfg}")
     print(f"\tshunt voltage: {ina219.get_shunt_voltage()}")
     print(f"\tbus voltage: {ina219.get_voltage()}")
     #
