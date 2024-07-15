@@ -95,13 +95,19 @@ class INA219Simple(InaBase):
     Voltage measurement range on the current measuring shunt: ±320 millivolts.
     There are no settings!"""
 
-    def get_shunt_adc_lsb(self)->float:
-        """Возвращает цену младшего разряда АЦП токового шунта"""
-        return 1E-5
+    # для вычислений
+    _lsb_shunt_voltage = 1E-5   # 10 uV
+    _lsb_bus_voltage = 4E-3     # 4 mV
 
-    def get_bus_adc_lsb(self)->float:
-        """Возвращает цену младшего разряда АЦП напряжения на шине"""
-        return 4E-3
+    @staticmethod
+    def get_shunt_adc_lsb()->float:
+        """Возвращает цену младшего разряда АЦП токового шунта. Не изменяется при изменении разрядности, что странно!"""
+        return INA219Simple._lsb_shunt_voltage
+
+    @staticmethod
+    def get_bus_adc_lsb()->float:
+        """Возвращает цену младшего разряда АЦП напряжения на шине. Не изменяется при изменении разрядности, что странно!"""
+        return INA219Simple._lsb_bus_voltage
 
     def __init__(self, adapter: bus_service.BusAdapter, address=0x40):
         super().__init__(adapter, address)
@@ -152,9 +158,6 @@ class INA219(INA219Simple, IBaseSensorEx, Iterator):
     # предел напряжения на шунте из документации, Вольт
     # shunt voltage limit, Volt
     _shunt_voltage_limit = 0.32
-    # для вычисления(!) тока. Разрядов АЦП: 12
-    _lsb_shunt_voltage = 1E-5
-    _lsb_bus_voltage = 4E-3
     # Предел измеряемого напряжения! И неважно, что чип измеряет до 32 Вольт!
     # В документации 26. Минус 1 вольт для запаса (Senses Bus Voltages from 0 to 26 V).
     # "Senses Bus Voltages from 0 to 26 V"
@@ -241,16 +244,6 @@ class INA219(INA219Simple, IBaseSensorEx, Iterator):
         self._shunt_voltage_enabled = None
         self._bus_voltage_enabled = None
 
-    def get_shunt_adc_lsb(self)->float:
-        """Возвращает цену младшего разряда АЦП токового шунта"""
-        raise NotImplemented
-        return 0.0
-
-    def get_bus_adc_lsb(self)->float:
-        """Возвращает цену младшего разряда АЦП напряжения на шине"""
-        raise NotImplemented
-        return 0.0
-
     def get_config(self, return_value: bool = True) -> [config_ina219, None]:
         """Считывает настройками датчика по шине"""
         raw_config = self._get_raw_cfg()
@@ -324,14 +317,6 @@ class INA219(INA219Simple, IBaseSensorEx, Iterator):
         # voltage, data_ready_flag, math_ovf
         return super().get_voltage()
 
-    @staticmethod
-    def shunt_voltage_range_to_volt(shunt_voltage_range: int):
-        """Преобразует индекс диапазона напряжения токового шунта в напряжение, Вольт.
-        Converts the current shunt voltage range index to voltage, Volts."""
-        index = check_value(shunt_voltage_range, range(4),
-                            f"Неверный индекс диапазона напряжения токового шунта: {shunt_voltage_range}")
-        return 0.040 * (2 ** index)
-
     @property
     def shunt_resistance(self):
         """Возвращает сопротивление токового шунта в Омах.
@@ -377,6 +362,14 @@ class INA219(INA219Simple, IBaseSensorEx, Iterator):
         #
         return _cfg
 
+    @property
+    def shunt_voltage_enabled(self) -> bool:
+        return self._shunt_voltage_enabled
+
+    @property
+    def bus_voltage_enabled(self) -> bool:
+        return self._bus_voltage_enabled
+
     # BaseSensor
 
     def soft_reset(self):
@@ -385,7 +378,19 @@ class INA219(INA219Simple, IBaseSensorEx, Iterator):
     def __iter__(self):
         return self
 
-    def __next__(self) -> tuple:
-        """Возвращает измеренные значения. кортеж, число.
-        Return measured values. tuple, digit"""
-        return self.get_voltage(), self.get_shunt_voltage()
+    def __next__(self) -> [float, tuple]:
+        """Возвращает измеренные значения. кортеж, число."""
+        _shunt, _bus = None, None
+        if self.shunt_voltage_enabled:
+            _shunt = self.get_shunt_voltage()
+        if self.bus_voltage_enabled:
+            _bus = self.get_voltage()
+        #
+        _a = not _shunt is None
+        _b = not _bus is None
+        if _a and _b:
+            return _bus, _shunt
+        if _a:
+            return _shunt
+        if _b:
+            return _bus
