@@ -301,10 +301,11 @@ class INA219(INA219Simple, IBaseSensorEx, Iterator):
         return 532 * coefficient
 
 
-    def get_bus_voltage_range(self) -> tuple:
-        """Возвращает измеряемый диапазон напряжений на шине в Вольтах в виде кортежа (верхний_предел, нижний_предел).
-        Returns the measured bus voltage range in Volts as a tuple (high_limit, low_limit)"""
-        return (INA219._vbus_max, 0) if self._bus_voltage_range else 16, 0
+    @property
+    def bus_voltage_range(self) -> bool:
+        """Возвращает измеряемый диапазон напряжений на шине. Если Истина то диапазон 0..25 Вольт, иначе 0..16 Вольт.
+        Returns the measured bus voltage range. If True then the range is 0..25 Volts, otherwise 0..16 Volts."""
+        return self._bus_voltage_range
 
     def get_shunt_voltage(self) -> float:
         """Смотри описание INA219Simple.get_shunt_voltage.
@@ -316,6 +317,16 @@ class INA219(INA219Simple, IBaseSensorEx, Iterator):
         See the description of INA219Simple.get_voltage."""
         # voltage, data_ready_flag, math_ovf
         return super().get_voltage()
+
+    def set_adc_resolution(self, bus_adc_resol: int, shunt_adc_resol: int):
+        """Устанавливает разрешение АЦП на шине и разрешение АЦП токового шунта. Допустимые значения от 9 до 12 включительно."""
+        r = range(9, 13)
+        if bus_adc_resol:
+            check_value(bus_adc_resol, r, f"Неверное разрешение АЦП напряжения на шине: {bus_adc_resol}")
+        if shunt_adc_resol:
+            check_value(shunt_adc_resol, r, f"Неверное разрешение АЦП тока нагрузки: {shunt_adc_resol}")
+        self._bus_adc_resolution = bus_adc_resol
+        self._shunt_adc_resolution = shunt_adc_resol
 
     @property
     def shunt_resistance(self):
@@ -346,11 +357,11 @@ class INA219(INA219Simple, IBaseSensorEx, Iterator):
         bf.field_name = 'BRNG'
         bf.set_field_value(value=self._bus_voltage_range)
         bf.field_name = 'PGA'
-        bf.set_field_value(value=self._shunt_voltage_range)
+        bf.set_field_value(value=self.current_shunt_voltage_range)
         bf.field_name = 'BADC'
-        bf.set_field_value(value=self._bus_adc_resolution)
+        bf.set_field_value(value=self.bus_adc_resolution)
         bf.field_name = 'SADC'
-        bf.set_field_value(value=self._shunt_adc_resolution)
+        bf.set_field_value(value=self.shunt_adc_resolution)
 
         _mode = _build_operating_mode(continuous=self._continuous,enable_bus_voltage=self._bus_voltage_enabled,
                               enable_shunt_voltage=self._shunt_voltage_enabled)
@@ -369,6 +380,14 @@ class INA219(INA219Simple, IBaseSensorEx, Iterator):
     @property
     def bus_voltage_enabled(self) -> bool:
         return self._bus_voltage_enabled
+
+    @property
+    def bus_adc_resolution(self) -> int:
+        return self._bus_adc_resolution
+
+    @property
+    def shunt_adc_resolution(self) -> int:
+        return self._shunt_adc_resolution
 
     # BaseSensor
 
