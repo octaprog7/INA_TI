@@ -60,6 +60,16 @@ def _build_operating_mode(continuous: bool = True, enable_shunt_voltage: bool = 
 
     return raw
 
+def _get_conv_time(value: int) -> int:
+    """Возвращает время из полей SADC, BADC в микросекундах"""
+    _conv_time = 84, 148, 276, 532
+    if value < 8:
+        value &= 0x3  # 0..3
+        return _conv_time[value]
+    # 0x8..0xF. Усреднение по 2, 4, 8, 16, 32, 64, 128 отсчетам
+    value -= 0x08  # 0..7
+    coefficient = 2 ** value
+    return 532 * coefficient
 
 class InaBase(DeviceEx):
     """Base class for INA current/voltage monitor"""
@@ -81,7 +91,6 @@ class InaBase(DeviceEx):
     def _get_raw_cfg(self) -> int:
         """Get raw configuration from register"""
         return self._get_16bit_reg(0x00, "H")
-
 
 class INA219Simple(InaBase):
     """Класс для работы с датчиком TI INA219 без какой либо настройки!
@@ -146,6 +155,8 @@ class INA219Simple(InaBase):
         усреднения и умножения. Он сбрасывается при следующих событиях:
             1) Запись нового режима в биты режима работы в регистре конфигурации (за исключением отключения или отключения питания).
             2) Чтение регистра мощности
+
+        Бит готовности (CNVR) к преобразованию устанавливается после завершения всех(!) операций преобразования, усреднения и умножения!
         ------------------------------------------------------------------------------
         Returns a tuple of input measured voltage, data ready flag, math overflow flag (OVF).
         The Math Overflow Flag (OVF) is set when power or current calculations are out of range.
@@ -307,16 +318,15 @@ class INA219(INA219Simple, IBaseSensorEx, Iterator):
         Для текущих настроек датчика. При изменении настроек следует заново вызвать этот метод!
         Не забудь вызвать get_config!"""
         bf = self._bit_fields
-        s_adc_field = bf.get_field_value()    # выделяю поле SADC (токовый шунт)
+        bf.field_name = 'SADC'
+        adc_field = bf.get_field_value()    # выделяю поле SADC (токовый шунт)
+        _t0 = _get_conv_time(adc_field)
+        bf.field_name = 'BADC'  # !!!
+        adc_field = bf.get_field_value()    # выделяю поле BADC (напряжение на шине)
+        _t1 = _get_conv_time(adc_field)
         # print(f"DBG:get_conversion_cycle_time: {s_adc_field}")
-        conv_time = 84, 148, 276, 532
-        if s_adc_field < 8:
-            s_adc_field &= 0x3  # 0..3
-            return conv_time[s_adc_field]
-        # 0x8..0xF
-        s_adc_field -= 0x08     # 0..7
-        coefficient = 2 ** s_adc_field
-        return 532 * coefficient
+        # возвращаю наибольшее значение
+        return max(_t0, _t1)
 
 
     @property
