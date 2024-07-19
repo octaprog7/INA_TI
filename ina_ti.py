@@ -336,16 +336,18 @@ class INA219(INA219Simple, IBaseSensorEx, Iterator):
         # voltage, data_ready_flag, math_ovf
         return super().get_voltage()
 
-    def set_shunt_adc_resolution(self, resol: int):
-        """Устанавливает разрешение АЦП токового шунта. Допустимые значения от 9 до 12 включительно."""
+    def set_shunt_adc_resolution(self, resol: [int, None]):
+        """Устанавливает разрешение АЦП токового шунта. Допустимые значения от 9 до 12 включительно.
+        Не забудь вызвать метод set_config(!)"""
         if resol is None:
             return
         r = range(9, 13)
         check_value(resol, r, f"Неверное разрешение АЦП токового шунта: {resol}")
         self._shunt_adc_resolution = resol
 
-    def set_bus_adc_resolution(self, resol: int):
-        """Устанавливает разрешение АЦП напряжения на шине. Допустимые значения от 9 до 12 включительно."""
+    def set_bus_adc_resolution(self, resol: [int, None]):
+        """Устанавливает разрешение АЦП напряжения на шине. Допустимые значения от 9 до 12 включительно.
+        Не забудь вызвать метод set_config(!)"""
         if resol is None:
             return
         r = range(9, 13)
