@@ -329,6 +329,15 @@ class INA219(INA219Simple, IBaseSensorEx, Iterator):
         return max(_t0, _t1)
 
 
+    def start_measurement(self, continuous: bool = True, enable_shunt_voltage: bool = True,
+                          enable_bus_voltage: bool = True):
+        """Настраивает параметры датчика и запускает процесс измерения"""
+        self._continuous = continuous
+        self._bus_voltage_enabled = enable_bus_voltage
+        self._shunt_voltage_enabled = enable_shunt_voltage
+        #
+        self.set_config()
+
     @property
     def bus_voltage_range(self) -> bool:
         """Возвращает измеряемый диапазон напряжений на шине. Если Истина то диапазон 0..25 Вольт, иначе 0..16 Вольт.
