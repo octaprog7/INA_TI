@@ -137,10 +137,15 @@ class INA219Simple(InaBase):
         return self.get_shunt_adc_lsb() * self._get_16bit_reg(0x01, "h")
 
     def get_voltage(self) -> tuple:
-        """Возвращает кортеж из входного измеряемого напряжения,
-        флага готовности данных, флага математического переполнения (OVF).
+        """Возвращает кортеж из входного измеряемого напряжения, флага готовности данных, флага математического переполнения (OVF).
         Флаг математического переполнения (OVF) устанавливается, когда расчеты мощности или тока выходят за допустимые
         пределы. Это указывает на то, что данные о токе и мощности могут быть бессмысленными!
+        ------------------------------------------------------------------------------
+        Хотя данные последнего преобразования могут быть прочитаны в любое время, бит готовности к преобразованию указывает,
+        когда  доступны данные преобразования в регистрах вывода данных. Бит готовности данных устанавливается после завершения всех(!) преобразований,
+        усреднения и умножения. Он сбрасывается при следующих событиях:
+            1) Запись нового режима в биты режима работы в регистре конфигурации (за исключением отключения или отключения питания).
+            2) Чтение регистра мощности
         ------------------------------------------------------------------------------
         Returns a tuple of input measured voltage, data ready flag, math overflow flag (OVF).
         The Math Overflow Flag (OVF) is set when power or current calculations are out of range.
@@ -318,15 +323,21 @@ class INA219(INA219Simple, IBaseSensorEx, Iterator):
         # voltage, data_ready_flag, math_ovf
         return super().get_voltage()
 
-    def set_adc_resolution(self, bus_adc_resol: int, shunt_adc_resol: int):
-        """Устанавливает разрешение АЦП на шине и разрешение АЦП токового шунта. Допустимые значения от 9 до 12 включительно."""
+    def set_shunt_adc_resolution(self, resol: int):
+        """Устанавливает разрешение АЦП токового шунта. Допустимые значения от 9 до 12 включительно."""
+        if resol is None:
+            return
         r = range(9, 13)
-        if bus_adc_resol:
-            check_value(bus_adc_resol, r, f"Неверное разрешение АЦП напряжения на шине: {bus_adc_resol}")
-        if shunt_adc_resol:
-            check_value(shunt_adc_resol, r, f"Неверное разрешение АЦП тока нагрузки: {shunt_adc_resol}")
-        self._bus_adc_resolution = bus_adc_resol
-        self._shunt_adc_resolution = shunt_adc_resol
+        check_value(resol, r, f"Неверное разрешение АЦП токового шунта: {resol}")
+        self._shunt_adc_resolution = resol
+
+    def set_bus_adc_resolution(self, resol: int):
+        """Устанавливает разрешение АЦП напряжения на шине. Допустимые значения от 9 до 12 включительно."""
+        if resol is None:
+            return
+        r = range(9, 13)
+        check_value(resol, r, f"Неверное разрешение АЦП напряжения на шине: {resol}")
+        self._bus_adc_resolution = resol
 
     @property
     def shunt_resistance(self):
@@ -385,9 +396,17 @@ class INA219(INA219Simple, IBaseSensorEx, Iterator):
     def bus_adc_resolution(self) -> int:
         return self._bus_adc_resolution
 
+    @bus_adc_resolution.setter
+    def bus_adc_resolution(self, value: int):
+        self.set_bus_adc_resolution(value)
+
     @property
     def shunt_adc_resolution(self) -> int:
         return self._shunt_adc_resolution
+
+    @shunt_adc_resolution.setter
+    def shunt_adc_resolution(self, value: int):
+        self.set_shunt_adc_resolution(value)
 
     # BaseSensor
 
