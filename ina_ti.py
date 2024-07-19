@@ -67,7 +67,7 @@ class InaBase(DeviceEx):
     def __init__(self, adapter: bus_service.BusAdapter, address):
         """"""
         check_value(address, range(0x40, 0x50), f"Неверный адрес устройства: {address}")
-        super().__init__(adapter, address, True)  # All data bytes are transmitted most significant byte first.
+        super().__init__(adapter, address, True)
 
     def _get_16bit_reg(self, address: int, format_char: str) -> int:
         _raw = self.read_reg(address, 2)
@@ -276,6 +276,19 @@ class INA219(INA219Simple, IBaseSensorEx, Iterator):
             return config_ina219(BRNG=self._bus_voltage_range, PGA=self._shunt_voltage_range,
                                  BADC=self._bus_adc_resolution, SADC=self._shunt_adc_resolution,
                                  MODE=self._operating_mode)
+
+    @property
+    def operating_mode(self) -> int:
+        """Возвращает режим работы ИС. 0..7"""
+        #   0           ИС Выключена
+        #   1           Измерение напряжение на токовом шунте (бит №0 == 1), однократный режим измерения (бит №2 == 0)
+        #   2           Измерение входного напряжение на шине (бит №1 == 1), однократный режим измерения (бит №2 == 0)
+        #   3           Измерение напряжение на шине и токовом шунте, однократный режим измерения (бит №2 == 0)
+        #   4           АЦП выключен (режим запрещен!). Бит №2 = 1, Бит №1 = 0, Бит №0 = 0
+        #   5           Измерение напряжение на токовом шунте (бит №0 == 1), непрерывный режим измерения (бит №2 == 1)
+        #   6           Измерение входного напряжение на шине (бит №1 == 1), непрерывный режим измерения (бит №2 == 1)
+        #   7           Измерение напряжение на шине и токовом шунте, непрерывный режим измерения (бит №2 == 1)
+        return self._operating_mode
 
     def is_single_shot_mode(self) -> bool:
         """Возвращает Истина, когда датчик находится в режиме однократных измерений,
