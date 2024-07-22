@@ -313,28 +313,48 @@ class INA219(INA219Simple, IBaseSensorEx, Iterator):
         Не забудь вызвать get_config!"""
         return self._operating_mode > 3
 
+    @property
+    def continuous(self) -> bool:
+        return self._continuous
+
+    @continuous.setter
+    def continuous(self, value):
+        self._continuous = value
+
     def get_conversion_cycle_time(self) -> int:
         """Возвращает время в мкс(!) преобразования сигнала в цифровой код и готовности его для чтения по шине!
         Для текущих настроек датчика. При изменении настроек следует заново вызвать этот метод!
         Не забудь вызвать get_config!"""
+        _t0, _t1 = 0, 0
         bf = self._bit_fields
-        bf.field_name = 'SADC'
-        adc_field = bf.get_field_value()    # выделяю поле SADC (токовый шунт)
-        _t0 = _get_conv_time(adc_field)
-        bf.field_name = 'BADC'  # !!!
-        adc_field = bf.get_field_value()    # выделяю поле BADC (напряжение на шине)
-        _t1 = _get_conv_time(adc_field)
+        if self.shunt_voltage_enabled:
+            bf.field_name = 'SADC'
+            adc_field = bf.get_field_value()    # выделяю поле SADC (токовый шунт)
+            _t0 = _get_conv_time(adc_field)
+        if self.bus_voltage_enabled:
+            bf.field_name = 'BADC'  # !!!
+            adc_field = bf.get_field_value()    # выделяю поле BADC (напряжение на шине)
+            _t1 = _get_conv_time(adc_field)
         # print(f"DBG:get_conversion_cycle_time: {s_adc_field}")
-        # возвращаю наибольшее значение
+        # возвращаю наибольшее значение, поскольку измерения производятся параллельно, как утверждает документация
         return max(_t0, _t1)
 
 
     def start_measurement(self, continuous: bool = True, enable_shunt_voltage: bool = True,
-                          enable_bus_voltage: bool = True):
-        """Настраивает параметры датчика и запускает процесс измерения"""
-        self._continuous = continuous
-        self._bus_voltage_enabled = enable_bus_voltage
-        self._shunt_voltage_enabled = enable_shunt_voltage
+                          enable_bus_voltage: bool = True, shunt_adc_resol: int = 12,
+                          bus_adc_resol: int = 12, current_auto_range = True):
+        """Настраивает параметры датчика и запускает процесс измерения.
+        continuous -
+        enable_shunt_voltage -
+        enable_bus_voltage -
+        shunt_adc_resol, bus_adc_resol -
+        current_auto_range -
+        """
+        self.continuous = continuous
+        self.bus_voltage_enabled = enable_bus_voltage
+        self.shunt_voltage_enabled = enable_shunt_voltage
+        self.bus_adc_resolution = bus_adc_resol
+        self.shunt_adc_resolution = shunt_adc_resol
         #
         self.set_config()
 
@@ -422,9 +442,17 @@ class INA219(INA219Simple, IBaseSensorEx, Iterator):
     def shunt_voltage_enabled(self) -> bool:
         return self._shunt_voltage_enabled
 
+    @shunt_voltage_enabled.setter
+    def shunt_voltage_enabled(self, value: bool):
+        self._shunt_voltage_enabled = value
+
     @property
     def bus_voltage_enabled(self) -> bool:
         return self._bus_voltage_enabled
+
+    @bus_voltage_enabled.setter
+    def bus_voltage_enabled(self, value: bool):
+        self._bus_voltage_enabled = value
 
     @property
     def bus_adc_resolution(self) -> int:
