@@ -1,4 +1,4 @@
-import utime
+import time
 import sys
 from machine import I2C
 from sensor_pack_2.bus_service import I2cAdapter
@@ -19,8 +19,8 @@ if __name__ == '__main__':
     adaptor = I2cAdapter(i2c)
     # bme - sensor
     ina219 = ina_ti.INA219Simple(adaptor)
-    cfg = ina219.get_config()
-    print(f"config: {cfg}")
+    # cfg = ina219.get_config()
+    # print(f"config: {cfg}")
     print(f"\tshunt voltage: {ina219.get_shunt_voltage()}")
     print(f"\tbus voltage: {ina219.get_voltage()}")
     #
@@ -30,21 +30,27 @@ if __name__ == '__main__':
         shunt_v = ina219.get_shunt_voltage()
         t = ina219.get_voltage()
         print(f"Shunt voltage: {shunt_v} V; Bus voltage: {t[0]} V; data ready flag: {t[1]}; overflow flag: {t[2]}")
-        utime.sleep_us(wait_time_us)
+        time.sleep_us(wait_time_us)
     del ina219
     
-    sys.exit(0)
-    
+    # sys.exit(0)
+
+    print(32 * "-")
     ina219 = ina_ti.INA219(adapter=adaptor, address=0x40, shunt_resistance=0.1)
-    ina219.bus_voltage_range = False    # 16 V
-    ina219.shunt_voltage = True        	# skip meas shunt voltage
+    # ina219.bus_voltage_range = False    # 16 V
+    ina219.bus_voltage_enabled = False
+    ina219.shunt_voltage_enabled = True
+    # ina219.shunt_voltage = True        	# skip meas shunt voltage
     # ina219.current_shunt_voltage_range = 2		# 160 mV
     ina219.set_config()
-    ina219.calibrate(max_expected_current=1.0)		# 1.0 A * 0.1 Ohm = 0.1 Volt max on shunt resistance!
+    # ina219.calibrate(max_expected_current=1.0)		# 1.0 A * 0.1 Ohm = 0.1 Volt max on shunt resistance!
 
+    ina219.start_measurement()
+    wait_time_us = ina219.get_conversion_cycle_time()
+    print(f"wait_time_us: {wait_time_us} мкс.")
     while True:
         shunt_v = ina219.get_shunt_voltage()
         t = ina219.get_voltage()
         print(f"Shunt voltage: {shunt_v} V; Bus voltage: {t[0]} V; data ready flag: {t[1]}; overflow flag: {t[2]}")
-        print(f"Bus voltage: {t[0]} V; Current: {ina219.get_current()} Amper; Power: {ina219.get_power()} Watt")
-        utime.sleep_ms(333)
+        # print(f"Bus voltage: {t[0]} V; Current: {ina219.get_current()} Amper; Power: {ina219.get_power()} Watt")
+        time.sleep_us(wait_time_us)

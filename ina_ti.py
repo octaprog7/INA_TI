@@ -52,12 +52,13 @@ def _build_operating_mode(continuous: bool = True, enable_shunt_voltage: bool = 
     if cv:
         raise ValueError("Режим, со значением 4 в поле MODE, запрещен! Смотрите 'Table 6. Mode Settings'")
     if continuous:
-        raw &= 0b100
+        raw |= 0b100
     if enable_bus_voltage:
-        raw &= 0b010
+        raw |= 0b010
     if enable_shunt_voltage:
-        raw &= 0b001
+        raw |= 0b001
 
+    # print(f"DBG:_build_operating_mode return: 0x{raw:X}")
     return raw
 
 def _get_conv_time(value: int) -> int:
@@ -203,21 +204,21 @@ class INA219(INA219Simple, IBaseSensorEx, Iterator):
         # для удобства работы с настройками
         self._bit_fields = BitFields(fields_info=INA219._config_reg_ina219)
         # False - 16 V; True - 32 V
-        self._bus_voltage_range = None
+        self._bus_voltage_range = False
         # value     range, mV   Gain
         # 0         ±40 mV      1
         # 1         ±80 mV      1/2
         # 2         ±160 mV     1/4
         # 3         ±320 mV     1/8
-        self._shunt_voltage_range = None
+        self._shunt_voltage_range = 3
         # value     Resolution, bit     Conversion Time, us
         #   0       9                   84
         #   1       10                  148
         #   2       11                  276
         #   3       12                  532
-        self._bus_adc_resolution = None
+        self._bus_adc_resolution = 3
         # все как и у _bus_adc_resolution
-        self._shunt_adc_resolution = None
+        self._shunt_adc_resolution = 3
         #   Value       Mode
         # ---------------------------------------
         #   0           ИС Выключена
@@ -228,7 +229,7 @@ class INA219(INA219Simple, IBaseSensorEx, Iterator):
         #   5           Измерение напряжение на токовом шунте (бит №0 == 1), непрерывный режим измерения (бит №2 == 1)
         #   6           Измерение входного напряжение на шине (бит №1 == 1), непрерывный режим измерения (бит №2 == 1)
         #   7           Измерение напряжение на шине и токовом шунте, непрерывный режим измерения (бит №2 == 1)
-        self._operating_mode = None
+        self._operating_mode = 1    # read only field
 
         # если Истина, измерение тока, путем измерения напряжения на шунте, производится! режимы работы
         # if True, a current measurement, by measuring the voltage across the shunt, is done! operating modes
@@ -256,9 +257,9 @@ class INA219(INA219Simple, IBaseSensorEx, Iterator):
         # max_expected_current - the maximum expected current through the current shunt.
         # If max_expected_current==None, then this current is automatically calculated. It is set to the maximum value.
         #self._calc(shunt_resistance=shunt_resistance, max_expected_current=None)
-        self._continuous = None
-        self._shunt_voltage_enabled = None
-        self._bus_voltage_enabled = None
+        self._continuous = True
+        self._shunt_voltage_enabled = True
+        self._bus_voltage_enabled = False
 
     def get_config(self, return_value: bool = True) -> [config_ina219, None]:
         """Считывает настройками датчика по шине"""
@@ -341,8 +342,8 @@ class INA219(INA219Simple, IBaseSensorEx, Iterator):
 
 
     def start_measurement(self, continuous: bool = True, enable_shunt_voltage: bool = True,
-                          enable_bus_voltage: bool = True, shunt_adc_resol: int = 12,
-                          bus_adc_resol: int = 12, current_auto_range = True):
+                          enable_bus_voltage: bool = True, shunt_adc_resol: int = 3,
+                          bus_adc_resol: int = 3, current_auto_range = True):
         """Настраивает параметры датчика и запускает процесс измерения.
         continuous -
         enable_shunt_voltage -
@@ -356,7 +357,8 @@ class INA219(INA219Simple, IBaseSensorEx, Iterator):
         self.bus_adc_resolution = bus_adc_resol
         self.shunt_adc_resolution = shunt_adc_resol
         #
-        self.set_config()
+        cfg = self.set_config()
+        print(f"DBG: set_config return: 0x{cfg:X}")
 
     @property
     def bus_voltage_range(self) -> bool:
@@ -380,7 +382,7 @@ class INA219(INA219Simple, IBaseSensorEx, Iterator):
         Не забудь вызвать метод set_config(!)"""
         if resol is None:
             return
-        r = range(9, 13)
+        r = range(4)
         check_value(resol, r, f"Неверное разрешение АЦП токового шунта: {resol}")
         self._shunt_adc_resolution = resol
 
@@ -389,7 +391,7 @@ class INA219(INA219Simple, IBaseSensorEx, Iterator):
         Не забудь вызвать метод set_config(!)"""
         if resol is None:
             return
-        r = range(9, 13)
+        r = range(4)
         check_value(resol, r, f"Неверное разрешение АЦП напряжения на шине: {resol}")
         self._bus_adc_resolution = resol
 
@@ -428,8 +430,10 @@ class INA219(INA219Simple, IBaseSensorEx, Iterator):
         bf.field_name = 'SADC'
         bf.set_field_value(value=self.shunt_adc_resolution)
 
+        print(f"DBG:_build_operating_mode: continuous: {self._continuous}; enable_bus_voltage: {self._bus_voltage_enabled}; enable_shunt_voltage: {self._shunt_voltage_enabled}")
         _mode = _build_operating_mode(continuous=self._continuous,enable_bus_voltage=self._bus_voltage_enabled,
                               enable_shunt_voltage=self._shunt_voltage_enabled)
+        print(f"DBG: _mode: {_mode}")
         bf.field_name = 'MODE'
         bf.set_field_value(value=_mode)
         #
