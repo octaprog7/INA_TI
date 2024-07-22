@@ -38,7 +38,7 @@ if __name__ == '__main__':
     print(32 * "-")
     ina219 = ina_ti.INA219(adapter=adaptor, address=0x40, shunt_resistance=0.1)
     # ina219.bus_voltage_range = False    # 16 V
-    ina219.bus_voltage_enabled = False
+    ina219.bus_voltage_enabled = True
     ina219.shunt_voltage_enabled = True
     # ina219.shunt_voltage = True        	# skip meas shunt voltage
     # ina219.current_shunt_voltage_range = 2		# 160 mV
