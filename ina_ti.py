@@ -181,17 +181,18 @@ class INA219(INA219Simple, IBaseSensorEx, Iterator):
     # Measured voltage limit! And it doesn't matter that the chip measures up to 32 volts!
     # In the documentation 26. Minus 1 volt for a margin (Senses Bus Voltages from 0 to 26 V)
     _vbus_max = 25
-
+    # разрешенные значения для полей BADC, SADC
+    _vval = tuple(i for i in range(0x10) if i not in range(4, 8))
     # описание регистра конфигурации
     _config_reg_ina219 = (bit_field_info(name='RST', position=range(15, 16), valid_values=None),    # Reset Bit
                            # Bus Voltage Range, 0 - 16 V; 1 - 32 V
                            bit_field_info(name='BRNG', position=range(13, 14), valid_values=None),
                            # PGA (Current Shunt Voltage Only). 0 - +/-40 mV; 1 - +/-80 mV; 2 - +/-160 mV; 3 - +/-320 mV;
-                           bit_field_info(name='PGA', position=range(11, 13), valid_values=range(6)),
+                           bit_field_info(name='PGA', position=range(11, 13), valid_values=range(4)),
                            # Bus ADC Resolution/Averaging. These bits adjust the Bus ADC resolution (9-, 10-, 11-, or 12-bit) or set the number of samples used when averaging results for the Bus Voltage Register (02h).
-                           bit_field_info(name='BADC', position=range(7, 11), valid_values=None),
+                           bit_field_info(name='BADC', position=range(7, 11), valid_values=_vval),
                            # Shunt ADC Resolution/Averaging. These bits adjust the Shunt ADC resolution (9-, 10-, 11-, or 12-bit) or set the number of samples used when averaging results for the Shunt Voltage Register (01h).
-                           bit_field_info(name='SADC', position=range(3, 7), valid_values=None),
+                           bit_field_info(name='SADC', position=range(3, 7), valid_values=_vval),
                            # Operating Mode. Selects continuous, triggered, or power-down mode of operation. These bits default to continuous shunt and bus measurement mode.
                            bit_field_info(name='MODE', position=range(3), valid_values=tuple(i for i in range(8) if 4 != i)),
                            )
@@ -211,11 +212,17 @@ class INA219(INA219Simple, IBaseSensorEx, Iterator):
         # 2         ±160 mV     1/4
         # 3         ±320 mV     1/8
         self._shunt_voltage_range = 3
-        # value     Resolution, bit     Conversion Time, us
-        #   0       9                   84
-        #   1       10                  148
-        #   2       11                  276
-        #   3       12                  532
+        # value     Resolution/Samples(*), bit      Conversion Time
+        #   0       9                               84 мкс
+        #   1       10                              148 мкс
+        #   2       11                              276 мкс
+        #   3       12                              532 мкс
+        #   8       12                              532 мкс
+        #   9       2(*)                            1.06 мс
+        #   10      4(*)                            2.13 мс
+        #   11      8(*)                            4.26 мс
+        #   ..      ....                            .......
+        #   15      128                             68.10 мс
         self._bus_adc_resolution = 3
         # все как и у _bus_adc_resolution
         self._shunt_adc_resolution = 3
@@ -332,30 +339,31 @@ class INA219(INA219Simple, IBaseSensorEx, Iterator):
             bf.field_name = 'SADC'
             adc_field = bf.get_field_value()    # выделяю поле SADC (токовый шунт)
             _t0 = _get_conv_time(adc_field)
+            print(f"DBG:get_conversion_cycle_time SADC: {adc_field}")
         if self.bus_voltage_enabled:
             bf.field_name = 'BADC'  # !!!
             adc_field = bf.get_field_value()    # выделяю поле BADC (напряжение на шине)
             _t1 = _get_conv_time(adc_field)
-        # print(f"DBG:get_conversion_cycle_time: {s_adc_field}")
+            print(f"DBG:get_conversion_cycle_time BADC: {adc_field}")
         # возвращаю наибольшее значение, поскольку измерения производятся параллельно, как утверждает документация
         return max(_t0, _t1)
 
 
     def start_measurement(self, continuous: bool = True, enable_shunt_voltage: bool = True,
-                          enable_bus_voltage: bool = True, shunt_adc_resol: int = 3,
-                          bus_adc_resol: int = 3, current_auto_range = True):
+                          enable_bus_voltage: bool = True, current_auto_range = True):
         """Настраивает параметры датчика и запускает процесс измерения.
-        continuous -
-        enable_shunt_voltage -
-        enable_bus_voltage -
-        shunt_adc_resol, bus_adc_resol -
-        current_auto_range -
+        continuous - если Истина, то новое измерение запускается автоматически после завершения предидущего
+        enable_shunt_voltage - включить измерение напряжения на токовом шунте
+        enable_bus_voltage - включить измерение напряжения на шине
+        shunt_adc_resol, bus_adc_resol - кол-во бит/отсчетов измерения напряжения на шине и напряжения на токовом шунте
+        current_auto_range - измерение напряжения на токовом шунте с автоматическим выбором его предела
         """
         self.continuous = continuous
         self.bus_voltage_enabled = enable_bus_voltage
         self.shunt_voltage_enabled = enable_shunt_voltage
-        self.bus_adc_resolution = bus_adc_resol
-        self.shunt_adc_resolution = shunt_adc_resol
+        # self.bus_adc_resolution = bus_adc_resol
+        # self.shunt_adc_resolution = shunt_adc_resol
+        self._auto_range = current_auto_range
         #
         cfg = self.set_config()
         print(f"DBG: set_config return: 0x{cfg:X}")
@@ -382,8 +390,7 @@ class INA219(INA219Simple, IBaseSensorEx, Iterator):
         Не забудь вызвать метод set_config(!)"""
         if resol is None:
             return
-        r = range(4)
-        check_value(resol, r, f"Неверное разрешение АЦП токового шунта: {resol}")
+        check_value(resol, INA219._vval, f"Неверное разрешение АЦП токового шунта: {resol}")
         self._shunt_adc_resolution = resol
 
     def set_bus_adc_resolution(self, resol: [int, None]):
@@ -391,8 +398,7 @@ class INA219(INA219Simple, IBaseSensorEx, Iterator):
         Не забудь вызвать метод set_config(!)"""
         if resol is None:
             return
-        r = range(4)
-        check_value(resol, r, f"Неверное разрешение АЦП напряжения на шине: {resol}")
+        check_value(resol, INA219._vval, f"Неверное разрешение АЦП напряжения на шине: {resol}")
         self._bus_adc_resolution = resol
 
     @property

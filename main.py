@@ -26,7 +26,7 @@ if __name__ == '__main__':
     #
     wait_time_us = ina219.get_conversion_cycle_time()
     print(f"wait_time_us: {wait_time_us} мкс.")
-    for _ in range(100):
+    for _ in range(10):
         shunt_v = ina219.get_shunt_voltage()
         t = ina219.get_voltage()
         print(f"Shunt voltage: {shunt_v} V; Bus voltage: {t[0]} V; data ready flag: {t[1]}; overflow flag: {t[2]}")
@@ -42,10 +42,14 @@ if __name__ == '__main__':
     ina219.shunt_voltage_enabled = True
     # ina219.shunt_voltage = True        	# skip meas shunt voltage
     # ina219.current_shunt_voltage_range = 2		# 160 mV
-    ina219.set_config()
+    # ina219.set_config()
     # ina219.calibrate(max_expected_current=1.0)		# 1.0 A * 0.1 Ohm = 0.1 Volt max on shunt resistance!
-
-    ina219.start_measurement()
+    ina219.bus_adc_resolution = 0x0A
+    ina219.shunt_adc_resolution = 0x0A
+    ina219.start_measurement(continuous=True)
+    cfg = ina219.get_config()
+    print(f"configuration: {cfg}")
+    print(f"operating mode: {ina219.operating_mode}")
     wait_time_us = ina219.get_conversion_cycle_time()
     print(f"wait_time_us: {wait_time_us} мкс.")
     while True:
@@ -54,3 +58,4 @@ if __name__ == '__main__':
         print(f"Shunt voltage: {shunt_v} V; Bus voltage: {t[0]} V; data ready flag: {t[1]}; overflow flag: {t[2]}")
         # print(f"Bus voltage: {t[0]} V; Current: {ina219.get_current()} Amper; Power: {ina219.get_power()} Watt")
         time.sleep_us(wait_time_us)
+        # sys.exit(0)
