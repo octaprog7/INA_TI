@@ -8,8 +8,9 @@ from sensor_pack_2.base_sensor import check_value, get_error_str
 # информация о битовом поле в виде именованного кортежа
 # name: str  - имя
 # position: range - место в номерах битах. position.start = первый бит, position.stop-1 - последний бит
-# valid_values: range - диапазон допустимых значений, если проверка не требуется, следует передать None
-bit_field_info = namedtuple("bit_field_info", "name position valid_values")
+# valid_values: [range, tuple] - диапазон допустимых значений, если проверка не требуется, следует передать None
+# description: str - читаемое описание значения, хранимого в битовом поле, если описания не требуется, следует передать None
+bit_field_info = namedtuple("bit_field_info", "name position valid_values description")
 
 
 def _bitmask(bit_rng: range) -> int:
@@ -87,7 +88,7 @@ class BitFields:
         rng = item.valid_values
         if rng and validate:
             print(f"DBG: value: {value}; rng: {rng}")
-            check_value(value, rng, get_error_str("value", value, rng))
+            check_value(value, rng, get_error_str(self.field_name, value, rng))
         pos = item.position
         bitmask = _bitmask(pos)
         src = self._get_source(source) & ~bitmask  # чистка битового диапазона
