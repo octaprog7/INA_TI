@@ -46,10 +46,12 @@ if __name__ == '__main__':
     # ina219.calibrate(max_expected_current=1.0)		# 1.0 A * 0.1 Ohm = 0.1 Volt max on shunt resistance!
     ina219.bus_adc_resolution = 0x0A
     ina219.shunt_adc_resolution = 0x0A
+    ina219.current_shunt_voltage_range = 3
     ina219.start_measurement(continuous=True)
     cfg = ina219.get_config()
     print(f"configuration: {cfg}")
-    print(f"operating mode: {ina219.operating_mode}")
+    # sys.exit(0)
+    # print(f"operating mode: {ina219.operating_mode}")
     wait_time_us = ina219.get_conversion_cycle_time()
     print(f"wait_time_us: {wait_time_us} мкс.")
     while True:

@@ -23,7 +23,16 @@ def _bitmask(bit_rng: range) -> int:
 class BitFields:
     """Хранилище информации о битовых полях с доступом по индексу.
     _source - кортеж именованных кортежей, описывающих битовые поля;"""
+    def _check(self, fields_info: tuple[bit_field_info, ...]):
+        """Проверки на правильность информации!"""
+        for field_info in fields_info:
+            if 0 == len(field_info.name):
+                raise ValueError(f"Нулевая длина строки имени битового поля!; position: {field_info.position}")
+            if 0 == len(field_info.position):
+                raise ValueError(f"Нулевая длина ('в битах') битового поля!; name: {field_info.name}")
+
     def __init__(self, fields_info: tuple[bit_field_info, ...]):
+        self._check(fields_info)
         self._fields_info = fields_info
         self._idx = 0
         # имя битового поля, которое будет параметром у методов get_value/set_value
@@ -31,9 +40,68 @@ class BitFields:
         # значение, из которого будут извлекаться битовые поля
         self._source_val = 0
 
-    def _get_field(self, field: [str, int, None]) -> bit_field_info:
+    def _by_name(self, name: str) -> [bit_field_info, None]:
+        """возвращает информацию о битовом поле по его имени (поле name именованного кортежа) или None"""
+        items = self._fields_info
+        for item in items:
+            if name == item.name:
+                return item
+
+    def _get_field(self, key: [str, int, None]) -> [bit_field_info, None]:
         """для внутреннего использования"""
-        return self.__getitem__(field if field else self.field_name)
+        fi = self._fields_info
+        _itm = None
+        if isinstance(key, int):
+            _itm = fi[key]
+        if isinstance(key, str):
+            _itm = self._by_name(key)
+        return _itm
+
+    def get_field_value(self, field_name: str = None, validate: bool = False) -> [int, bool]:
+        """возвращает значение битового поля, по его имени(self.field_name), из self.source."""
+        f_name = self.field_name if field_name is None else field_name
+        item = self._get_field(f_name)
+        if item is None:
+            raise ValueError(f"get_field_value. Поле с именем {f_name} не существует!")
+        pos = item.position
+        bitmask = _bitmask(pos)
+        val = (self.source & bitmask) >> pos.start  # выделение маской битового диапазона и его сдвиг вправо
+        if item.valid_values and validate:
+            raise NotImplemented("get_field_value validate")
+        if 1 == len(pos):
+            return 0 != val     # bool
+        return val              # int
+
+    def set_field_value(self, value: int, source: [int, None] = None, field: [str, int, None] = None,
+                        validate: bool = True) -> int:
+        """Записывает value в битовый диапазон, определяемый параметром field, в source.
+        Возвращает значение с измененным битовым полем.
+        Если field is None, то имя поля берется из свойства self._active_field_name.
+        Если source is None, то значение поля, подлежащее изменению, изменяется в свойстве self._source_val"""
+        item = self._get_field(key=field)     #   *
+        rng = item.valid_values
+        if rng and validate:
+            print(f"DBG: value: {value}; rng: {rng}")
+            check_value(value, rng, get_error_str(self.field_name, value, rng))
+        pos = item.position
+        bitmask = _bitmask(pos)
+        src = self._get_source(source) & ~bitmask  # чистка битового диапазона
+        src |= (value << pos.start) & bitmask  # установка битов в заданном диапазоне
+        # print(f"DBG:set_field_value: {value}; {source}; {field}")
+        if source is None:
+            self._source_val = src
+            # print(f"DBG:set_field_value: self._source_val: {self._source_val}")
+        return src
+
+    def __getitem__(self, key: [int, str]) -> [int, bool]:
+        """возвращает значение битового поля из значения в self.source по его имени/индексу"""
+        _bfi = self._get_field(key)
+        return self.get_field_value(_bfi.name)
+
+    def __setitem__(self, field_name: str, value: [int, bool]):
+        """Волшебный метод, вызывает set_field_value.
+        До его вызова нужно установить свойства BitField source"""
+        self.set_field_value(value=value, source=None, field=field_name, validate=True)     #   *
 
     def _get_source(self, source: [int, None]) -> int:
         return source if source else self._source_val
@@ -60,59 +128,8 @@ class BitFields:
         параметр field is None"""
         self._active_field_name = value
 
-    def _by_name(self, name: str) -> [bit_field_info, None]:
-        """возвращает информацию о битовом поле по его имени (поле name именованного кортежа) или None"""
-        items = self._fields_info
-        for item in items:
-            if name == item.name:
-                return item
-
     def __len__(self) -> int:
         return len(self._fields_info)
-
-    def __getitem__(self, key: [int, str]) -> [bit_field_info, None]:
-        """возвращает информацию о битовом поле по его имени/индексу или None"""
-        fi = self._fields_info
-        if isinstance(key, int):
-            return fi[key]
-        if isinstance(key, str):
-            return self._by_name(key)
-
-    def set_field_value(self, value: int, source: [int, None] = None, field: [str, int, None] = None,
-                        validate: bool = True) -> int:
-        """Записывает value в битовый диапазон, определяемый параметром field, в source.
-        Возвращает значение с измененным битовым полем.
-        Если field is None, то имя поля берется из свойства self._active_field_name.
-        Если source is None, то значение поля, подлежащее изменению, изменяется в свойстве self._source_val"""
-        item = self._get_field(field=field)
-        rng = item.valid_values
-        if rng and validate:
-            print(f"DBG: value: {value}; rng: {rng}")
-            check_value(value, rng, get_error_str(self.field_name, value, rng))
-        pos = item.position
-        bitmask = _bitmask(pos)
-        src = self._get_source(source) & ~bitmask  # чистка битового диапазона
-        src |= (value << pos.start) & bitmask  # установка битов в заданном диапазоне
-        # print(f"DBG:set_field_value: {value}; {source}; {field}")
-        if source is None:
-            self._source_val = src
-            # print(f"DBG:set_field_value: self._source_val: {self._source_val}")
-        return src
-
-    def get_field_value(self, validate: bool = False) -> [int, bool]:
-        """возвращает значение битового поля, по его имени(self.field_name), из self.source."""
-        f_name = self.field_name
-        item = self._get_field(f_name)
-        if item is None:
-            raise ValueError(f"get_field_value. Поле с именем {f_name} не существует!")
-        pos = item.position
-        bitmask = _bitmask(pos)
-        val = (self.source & bitmask) >> pos.start  # выделение маской битового диапазона и его сдвиг вправо
-        if item.valid_values and validate:
-            raise NotImplemented("get_value validate")
-        if 1 == len(pos):
-            return 0 != val     # bool
-        return val              # int
 
     # протокол итератора
     def __iter__(self):
