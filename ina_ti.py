@@ -350,13 +350,11 @@ class INA219(INA219Simple, BaseSensorEx, IBaseSensorEx, Iterator):
         _t0, _t1 = 0, 0
         bf = self._bit_fields
         if self.shunt_adc_enabled:
-            bf.field_name = 'SADC'
-            adc_field = bf.get_field_value()    # выделяю поле SADC (токовый шунт)
+            adc_field = bf['SADC']    # выделяю поле SADC (токовый шунт)
             _t0 = _get_conv_time(adc_field)
             print(f"DBG:get_conversion_cycle_time SADC: {adc_field}")
         if self.bus_adc_enabled:
-            bf.field_name = 'BADC'  # !!!
-            adc_field = bf.get_field_value()    # выделяю поле BADC (напряжение на шине)
+            adc_field = bf['BADC']    # выделяю поле BADC (напряжение на шине)
             _t1 = _get_conv_time(adc_field)
             print(f"DBG:get_conversion_cycle_time BADC: {adc_field}")
         # возвращаю наибольшее значение, поскольку измерения производятся параллельно, как утверждает документация
@@ -374,7 +372,7 @@ class INA219(INA219Simple, BaseSensorEx, IBaseSensorEx, Iterator):
         """
         self.bus_adc_enabled = enable_bus_adc
         self.shunt_adc_enabled = enable_shunt_adc
-        self.continuous = continuous
+        self.continuous = continuous    # устанавливайте этот бит после bus_adc_enabled и shunt_adc_enabled
         # self.bus_adc_resolution = bus_adc_resol
         # self.shunt_adc_resolution = shunt_adc_resol
         self._auto_range = current_auto_range
