@@ -67,7 +67,7 @@ class BitFields:
         bitmask = _bitmask(pos)
         val = (self.source & bitmask) >> pos.start  # выделение маской битового диапазона и его сдвиг вправо
         if item.valid_values and validate:
-            raise NotImplemented("get_field_value validate")
+            raise NotImplemented("Если вы решили проверить значение поля при его возвращении, то делайте это самостоятельно!!!")
         if 1 == len(pos):
             return 0 != val     # bool
         return val              # int
