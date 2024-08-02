@@ -26,11 +26,13 @@ if __name__ == '__main__':
     #
     wait_time_us = ina219.get_conversion_cycle_time()
     print(f"wait_time_us: {wait_time_us} мкс.")
-    for _ in range(10):
+    for _ in range(1_000_000_000_000):
         shunt_v = ina219.get_shunt_voltage()
         t = ina219.get_voltage()
-        print(f"Shunt voltage: {shunt_v} V; Bus voltage: {t[0]} V; data ready flag: {t[1]}; overflow flag: {t[2]}")
+        curr = shunt_v / 0.1
+        print(f"Shunt: {shunt_v} V;\tBus: {t[0]} V;\tcurr: {curr} A;\tdata rdy flag: {t[1]};\tovf flag: {t[2]}")
         time.sleep_us(wait_time_us)
+        time.sleep_ms(100)
     del ina219
     
     # sys.exit(0)
@@ -57,7 +59,7 @@ if __name__ == '__main__':
     while True:
         shunt_v = ina219.get_shunt_voltage()
         t = ina219.get_voltage()
-        print(f"Shunt voltage: {shunt_v} V; Bus voltage: {t[0]} V; data ready flag: {t[1]}; overflow flag: {t[2]}")
+        print(f"Shunt: {shunt_v} V; Bus: {t[0]} V; data rdy flag: {t[1]}; ovf flag: {t[2]}")
         # print(f"Bus voltage: {t[0]} V; Current: {ina219.get_current()} Amper; Power: {ina219.get_power()} Watt")
         time.sleep_us(wait_time_us)
         # sys.exit(0)

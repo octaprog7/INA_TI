@@ -146,10 +146,10 @@ class INA219Simple(InaBase):
         The Math Overflow Flag (OVF) is set when power or current calculations are out of range.
         This indicates that current and power data may be meaningless!"""
         # DC ACCURACY:  ADC basic resolution: 12 bit;    Bus voltage, 1 LSB step size: 4 mV
-        reg_raw = self._get_16bit_reg(0x02, "h")
+        _reg_raw = self._get_16bit_reg(0x02, "H") >> 3
         # print(f"reg_raw: {hex(reg_raw)}")
         #           voltage             data ready flag         math overflow flag
-        return self.get_bus_adc_lsb() * (reg_raw >> 3), bool(reg_raw & 0x02), bool(reg_raw & 0x01)
+        return _reg_raw * self.get_bus_adc_lsb(), bool(_reg_raw & 0x02), bool(_reg_raw & 0x01)
 
 
 class INA219(INA219Simple, BaseSensorEx, IBaseSensorEx, Iterator):
@@ -313,7 +313,7 @@ class INA219(INA219Simple, BaseSensorEx, IBaseSensorEx, Iterator):
         return super().get_voltage()
 
     @property
-    def shunt_resistance(self):
+    def shunt_resistance(self) -> float:
         """Возвращает сопротивление токового шунта в Омах.
         Returns the resistance of the current shunt in ohms."""
         return self._shunt_res
