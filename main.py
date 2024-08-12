@@ -26,7 +26,7 @@ if __name__ == '__main__':
     #
     wait_time_us = ina219.get_conversion_cycle_time()
     print(f"wait_time_us: {wait_time_us} мкс.")
-    for _ in range(1_000_000_000_000):
+    for _ in range(1):
         shunt_v = ina219.get_shunt_voltage()
         t = ina219.get_voltage()
         curr = shunt_v / 0.1
@@ -38,7 +38,8 @@ if __name__ == '__main__':
     # sys.exit(0)
 
     print(32 * "-")
-    ina219 = ina_ti.INA219(adapter=adaptor, address=0x40, shunt_resistance=0.1)
+    # ina219 = ina_ti.INA219(adapter=adaptor, address=0x40, max_expected_curr=3.2, shunt_resistance=0.1)
+    ina219 = ina_ti.INA219(adapter=adaptor, address=0x40, max_expected_curr=1.6, shunt_resistance=0.1)
     # ina219.bus_voltage_range = False    # 16 V
     ina219.bus_voltage_enabled = True
     ina219.shunt_voltage_enabled = True
@@ -48,10 +49,13 @@ if __name__ == '__main__':
     # ina219.calibrate(max_expected_current=1.0)		# 1.0 A * 0.1 Ohm = 0.1 Volt max on shunt resistance!
     ina219.bus_adc_resolution = 0x0A
     ina219.shunt_adc_resolution = 0x0A
-    ina219.current_shunt_voltage_range = 3
+    # ina219.current_shunt_voltage_range = 3
     ina219.start_measurement(continuous=True)
     cfg = ina219.get_config()
     print(f"configuration: {cfg}")
+    print(f"current_shunt_voltage_range: {ina219.current_shunt_voltage_range}")
+    print(f"shunt_adc_lsb: {ina219.get_shunt_adc_lsb()}")
+    print(f"current lsb: {ina219._current_lsb} [A]")
     # sys.exit(0)
     # print(f"operating mode: {ina219.operating_mode}")
     wait_time_us = ina219.get_conversion_cycle_time()
@@ -59,7 +63,10 @@ if __name__ == '__main__':
     while True:
         shunt_v = ina219.get_shunt_voltage()
         t = ina219.get_voltage()
-        print(f"Shunt: {shunt_v} V; Bus: {t[0]} V; data rdy flag: {t[1]}; ovf flag: {t[2]}")
+        print(f"current: {ina219.get_current()} [A]\tpower: {ina219.get_power()} [Вт]")
+        # print(f"Shunt: {shunt_v} V; Bus: {t[0]} V; data rdy flag: {t[1]}; ovf flag: {t[2]}")
         # print(f"Bus voltage: {t[0]} V; Current: {ina219.get_current()} Amper; Power: {ina219.get_power()} Watt")
+        # print(f"pwr reg: {ina219._get_pwr_reg()}\tcalibr reg: {ina219._get_calibr_reg()}")
         time.sleep_us(wait_time_us)
-        # sys.exit(0)
+        time.sleep_ms(100)
+    # sys.exit(0)
