@@ -81,7 +81,7 @@ class BitFields:
         item = self._get_field(key=field)     #   *
         rng = item.valid_values
         if rng and validate:
-            print(f"DBG: value: {value}; rng: {rng}")
+            # print(f"DBG: value: {value}; rng: {rng}")
             check_value(value, rng, get_error_str(self.field_name, value, rng))
         pos = item.position
         bitmask = _bitmask(pos)

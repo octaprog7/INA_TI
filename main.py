@@ -1,9 +1,13 @@
 import time
-import sys
+# import sys
 from machine import I2C
 from sensor_pack_2.bus_service import I2cAdapter
 import ina_ti
 
+def show_header(info: str, width: int = 32):
+    print(width * "-")
+    print(info)
+    print(width * "-")
 
 if __name__ == '__main__':
     # пожалуйста установите выводы scl и sda в конструкторе для вашей платы, иначе ничего не заработает!
@@ -15,58 +19,48 @@ if __name__ == '__main__':
     # Замените id=1 на id=0, если пользуетесь первым портом I2C !!!
     # Warning!!!
     # Replace id=1 with id=0 if you are using the first I2C port !!!
+    cycles_count = 10
     i2c = I2C(id=1, freq=400_000)  # on Arduino Nano RP2040 Connect tested
     adaptor = I2cAdapter(i2c)
-    # bme - sensor
+
+    show_header("INA219Simple. Настроек нет. Автоматический режим измерений. Напряжение на шине до 26 В, напряжение на шунте до 0.32 В.")
     ina219 = ina_ti.INA219Simple(adaptor)
-    # cfg = ina219.get_config()
-    # print(f"config: {cfg}")
-    print(f"\tshunt voltage: {ina219.get_shunt_voltage()}")
-    print(f"\tbus voltage: {ina219.get_voltage()}")
-    #
+    # print(f"\tshunt voltage: {ina219.get_shunt_voltage()}")
+    # print(f"\tbus voltage: {ina219.get_voltage()}")
     wait_time_us = ina219.get_conversion_cycle_time()
     print(f"wait_time_us: {wait_time_us} мкс.")
-    for _ in range(1):
-        shunt_v = ina219.get_shunt_voltage()
-        t = ina219.get_voltage()
-        curr = shunt_v / 0.1
-        print(f"Shunt: {shunt_v} V;\tBus: {t[0]} V;\tcurr: {curr} A;\tdata rdy flag: {t[1]};\tovf flag: {t[2]}")
+    for _ in range(cycles_count):
+        shunt_v, t = ina219.get_shunt_voltage(), ina219.get_voltage()
+        print(f"Shunt: {shunt_v} V;\tBus: {t}")
         time.sleep_us(wait_time_us)
+        # дополнительная задержка, чтобы не зависала IDE
         time.sleep_ms(100)
     del ina219
-    
-    # sys.exit(0)
 
-    print(32 * "-")
-    # ina219 = ina_ti.INA219(adapter=adaptor, address=0x40, max_expected_curr=3.2, shunt_resistance=0.1)
+    # класс с настройками
     ina219 = ina_ti.INA219(adapter=adaptor, address=0x40, max_expected_curr=1.6, shunt_resistance=0.1)
-    # ina219.bus_voltage_range = False    # 16 V
-    ina219.bus_voltage_enabled = True
+    ina219.bus_voltage_range = False    # 16 V
     ina219.shunt_voltage_enabled = True
-    # ina219.shunt_voltage = True        	# skip meas shunt voltage
-    # ina219.current_shunt_voltage_range = 2		# 160 mV
-    # ina219.set_config()
-    # ina219.calibrate(max_expected_current=1.0)		# 1.0 A * 0.1 Ohm = 0.1 Volt max on shunt resistance!
     ina219.bus_adc_resolution = 0x0A
     ina219.shunt_adc_resolution = 0x0A
-    # ina219.current_shunt_voltage_range = 3
-    ina219.start_measurement(continuous=True)
-    cfg = ina219.get_config()
-    print(f"configuration: {cfg}")
-    print(f"current_shunt_voltage_range: {ina219.current_shunt_voltage_range}")
-    print(f"shunt_adc_lsb: {ina219.get_shunt_adc_lsb()}")
-    print(f"current lsb: {ina219._current_lsb} [A]")
-    # sys.exit(0)
-    # print(f"operating mode: {ina219.operating_mode}")
+
+    show_header("INA219. Настройки! Ручной режим измерений")
+    ina219.start_measurement(continuous=False, enable_calibration=True)
+    print(f"configuration: {ina219.get_config()}")
     wait_time_us = ina219.get_conversion_cycle_time()
     print(f"wait_time_us: {wait_time_us} мкс.")
-    while True:
-        shunt_v = ina219.get_shunt_voltage()
-        t = ina219.get_voltage()
-        print(f"current: {ina219.get_current()} [A]\tpower: {ina219.get_power()} [Вт]")
-        # print(f"Shunt: {shunt_v} V; Bus: {t[0]} V; data rdy flag: {t[1]}; ovf flag: {t[2]}")
-        # print(f"Bus voltage: {t[0]} V; Current: {ina219.get_current()} Amper; Power: {ina219.get_power()} Watt")
-        # print(f"pwr reg: {ina219._get_pwr_reg()}\tcalibr reg: {ina219._get_calibr_reg()}")
-        time.sleep_us(wait_time_us)
+    for _ in range(cycles_count):
         time.sleep_ms(100)
-    # sys.exit(0)
+        time.sleep_us(wait_time_us)
+        shunt_v, t = ina219.get_shunt_voltage(), ina219.get_voltage()
+        print(f"Shunt: {shunt_v} V;\tBus: {t}")
+        # запрещаю калибровку, многократная калибровка не нужна! Команда на каждое измерение выдается вручную!
+        ina219.start_measurement(continuous=False, enable_calibration=False)
+
+    show_header("INA219. Настройки! Автоматический(!) режим измерений")
+    ina219.start_measurement(continuous=True, enable_calibration=True)
+    print(f"configuration: {ina219.get_config()}")
+    for data in ina219:
+        time.sleep_us(wait_time_us)
+        print(f"data: {data}")
+        time.sleep_ms(100)
