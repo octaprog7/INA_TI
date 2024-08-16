@@ -43,10 +43,10 @@ ESP или любой другой платы с прошивкой MicroPython!
 Вызовом метода start_measurement, датчик переводится в режим автоматического выполнения измерений. start_measurement(continuous = True, .. .
 
 ## Параметры в методах
-### def start_measurement(self, single_shot: bool, data_rate_raw: int, gain_raw: int, channel: int, differential_channel: bool): 
+### def start_measurement(continuous: bool, enable_calibration: bool, enable_shunt_adc: bool, enable_bus_adc: bool): 
 
 * continuous - если Истина, то новое измерение запускается автоматически после завершения предидущего
-* enable_calibration - если Истина, то происходит калибловка под заданное сопротивление шунта и ток в нагрузке
+* enable_calibration - если Истина, то происходит калибровка под заданное сопротивление шунта и ток в нагрузке
 * enable_shunt_adc - включить измерение напряжения на токовом шунте
 * enable_bus_adc - включить измерение напряжения на шине
 
