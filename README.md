@@ -90,9 +90,7 @@ ESP или любой другой платы с прошивкой MicroPython!
 и переделаю MCP342X, ADC1115 под новый BitFields. 
 
 # Плата с INA219
-![alt text](https://github.com/octaprog7/mcp3421/blob/master/pics/3421_brd.jpg)
-# Плата INA219 c припаянным делителем напряжения
-![alt text](https://github.com/octaprog7/mcp3421/blob/master/pics/3421_del.jpg)
+![alt text](https://github.com/octaprog7/INA_TI/blob/master/pics/board.jpg)
 # Среда разработки (IDE)
 ## IDE
-![alt text](https://github.com/octaprog7/mcp3421/blob/master/pics/3421_ide.png)
+![alt text](https://github.com/octaprog7/INA_TI/blob/master/pics/ide_0.png)
