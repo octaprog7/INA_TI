@@ -85,10 +85,6 @@ ESP или любой другой платы с прошивкой MicroPython!
 # Предупреждение
 Никогда не подавайте на вывод Vin(+), Vin(-) напряжение больше 26 Вольт!
 
-# Внимание
-Класс BitFields изменен, поэтому [MCP342X](https://github.com/octaprog7/mcp3421), [ADC1115](https://github.com/octaprog7/ads1115) одновременно с INA_TI работать не будут! Надеюсь, я найду время
-и переделаю MCP342X, ADC1115 под новый BitFields. 
-
 # Плата с INA219
 ![alt text](https://github.com/octaprog7/INA_TI/blob/master/pics/board.jpg)
 # Среда разработки (IDE)
