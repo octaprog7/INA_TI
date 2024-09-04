@@ -23,7 +23,8 @@ def _bitmask(bit_rng: range) -> int:
 class BitFields:
     """Хранилище информации о битовых полях с доступом по индексу.
     _source - кортеж именованных кортежей, описывающих битовые поля;"""
-    def _check(self, fields_info: tuple[bit_field_info, ...]):
+    @staticmethod
+    def _check(fields_info: tuple[bit_field_info, ...]):
         """Проверки на правильность информации!"""
         for field_info in fields_info:
             if 0 == len(field_info.name):
@@ -32,7 +33,7 @@ class BitFields:
                 raise ValueError(f"Нулевая длина ('в битах') битового поля!; name: {field_info.name}")
 
     def __init__(self, fields_info: tuple[bit_field_info, ...]):
-        self._check(fields_info)
+        BitFields._check(fields_info)
         self._fields_info = fields_info
         self._idx = 0
         # имя битового поля, которое будет параметром у методов get_value/set_value
@@ -51,6 +52,8 @@ class BitFields:
         """для внутреннего использования"""
         fi = self._fields_info
         _itm = None
+        if key is None:
+            _itm = self._by_name(self.field_name)
         if isinstance(key, int):
             _itm = fi[key]
         if isinstance(key, str):
@@ -59,10 +62,9 @@ class BitFields:
 
     def get_field_value(self, field_name: str = None, validate: bool = False) -> [int, bool]:
         """возвращает значение битового поля, по его имени(self.field_name), из self.source."""
-        f_name = self.field_name if field_name is None else field_name
-        item = self._get_field(f_name)
+        item = self._get_field(field_name)
         if item is None:
-            raise ValueError(f"get_field_value. Поле с именем {f_name} не существует!")
+            raise ValueError(f"get_field_value. Поле с именем {field_name} не существует!")
         pos = item.position
         bitmask = _bitmask(pos)
         val = (self.source & bitmask) >> pos.start  # выделение маской битового диапазона и его сдвиг вправо
@@ -81,16 +83,13 @@ class BitFields:
         item = self._get_field(key=field)     #   *
         rng = item.valid_values
         if rng and validate:
-            # print(f"DBG: value: {value}; rng: {rng}")
             check_value(value, rng, get_error_str(self.field_name, value, rng))
         pos = item.position
         bitmask = _bitmask(pos)
         src = self._get_source(source) & ~bitmask  # чистка битового диапазона
         src |= (value << pos.start) & bitmask  # установка битов в заданном диапазоне
-        # print(f"DBG:set_field_value: {value}; {source}; {field}")
         if source is None:
             self._source_val = src
-            # print(f"DBG:set_field_value: self._source_val: {self._source_val}")
         return src
 
     def __getitem__(self, key: [int, str]) -> [int, bool]:

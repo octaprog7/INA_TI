@@ -97,7 +97,6 @@ class RegistryRO(BaseRegistry):
         by = self._device.read_reg(self._address, bl)
         fmt = "B" if 1 == bl else "H"
         self._value = self._device.unpack(fmt, by)[0]
-        # print(f"DBG:read: 0x{self._value:x}; byte len: {bl}; address: {self._address}")
         return self._value
 
     def __int__(self) -> int:
@@ -113,4 +112,3 @@ class RegistryRW(RegistryRO):
         if self._rw_enabled():
             val = value if value else self.value
             self._device.write_reg(self._address, val, self._byte_len)
-            # print(f"DBG:RegistryRW.write: 0x{val:x}")

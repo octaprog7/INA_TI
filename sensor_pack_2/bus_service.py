@@ -221,7 +221,7 @@ class SpiAdapter(BusAdapter):
         finally:
             device_addr.high()
 
-    def read_buf_from_memory(self, device_addr: Pin, mem_addr, buf):
+    def read_buf_from_memory(self, device_addr: Pin, mem_addr, buf, address_size: int):
         """Читает из устройства с адресом device_addr в буфер buf, начиная с адреса в устройстве mem_addr.
         Количество считываемых байт определяется длинной буфера buf."""
         try:

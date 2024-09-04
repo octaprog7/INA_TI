@@ -306,7 +306,7 @@ class INA219(INA219Simple, BaseSensorEx, IBaseSensorEx, Iterator):
                           enable_shunt_adc: bool = True, enable_bus_adc: bool = True):
         """Настраивает параметры датчика и запускает процесс измерения.
         continuous - если Истина, то новое измерение запускается автоматически после завершения предидущего;
-        enable_calibration - если Истина, то происходит калибловка под заданное сопротивление шунта и ток в нагрузке;
+        enable_calibration - если Истина, то происходит калибровка под заданное сопротивление шунта и ток в нагрузке;
         enable_shunt_adc - включить измерение напряжения на токовом шунте;
         enable_bus_adc - включить измерение напряжения на шине;"""
         self.bus_adc_enabled = enable_bus_adc
@@ -315,7 +315,7 @@ class INA219(INA219Simple, BaseSensorEx, IBaseSensorEx, Iterator):
         if enable_calibration:
             self.calibrate(self.max_expected_current, self.shunt_resistance)
         # print(f"DBG: calibrate value: 0x{clbr:X}")
-        cfg = self.set_config()
+        self.set_config()
         # print(f"DBG: set_config return: 0x{cfg:X}")
 
     @property
