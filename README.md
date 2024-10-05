@@ -82,11 +82,17 @@ ESP или любой другой платы с прошивкой MicroPython!
 
 '*' - количество усредняемых отсчетов.
 
-# Предупреждение
+# Предупреждение для INA219
 Никогда не подавайте на вывод Vin(+), Vin(-) напряжение больше 26 Вольт!
+
+# Ветка experimental
+Файл ina_ty.py содержит два класса. Это INA219 и INA226.
 
 # Плата с INA219
 ![alt text](https://github.com/octaprog7/INA_TI/blob/master/pics/board.jpg)
+# Плата с INA226
+![alt text](https://github.com/octaprog7/INA_TI/blob/master/pics/board_226.jpg)
 # Среда разработки (IDE)
 ## IDE
 ![alt text](https://github.com/octaprog7/INA_TI/blob/master/pics/ide_0.png)
+![alt text](https://github.com/octaprog7/INA_TI/blob/master/pics/ide_226.png)

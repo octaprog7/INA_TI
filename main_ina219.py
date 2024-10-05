@@ -38,11 +38,12 @@ if __name__ == '__main__':
     del ina219
 
     # класс с настройками
-    ina219 = ina_ti.INA219(adapter=adaptor, address=0x40, max_expected_curr=1.6, shunt_resistance=0.1)
+    ina219 = ina_ti.INA219(adapter=adaptor, address=0x40, shunt_resistance=0.1)
     ina219.bus_voltage_range = False    # 16 V
     ina219.shunt_voltage_enabled = True
-    ina219.bus_adc_resolution = 0x0A
-    ina219.shunt_adc_resolution = 0x0A
+    ina219.bus_adc_resolution = 0x03
+    ina219.shunt_adc_resolution = 0x03
+    ina219.max_expected_current = 1.0 # Ампер
 
     show_header("INA219. Настройки! Ручной режим измерений")
     ina219.start_measurement(continuous=False, enable_calibration=True)
@@ -52,8 +53,8 @@ if __name__ == '__main__':
     for _ in range(cycles_count):
         time.sleep_ms(100)
         time.sleep_us(wait_time_us)
-        shunt_v, t = ina219.get_shunt_voltage(), ina219.get_voltage()
-        print(f"Shunt: {shunt_v} V;\tBus: {t}")
+        shunt_v, bus_v, curr, pwr = ina219.get_shunt_voltage(), ina219.get_voltage(), ina219.get_current(), ina219.get_power()
+        print(f"Shunt: {shunt_v} V;\tBus: {bus_v}\tCurrent: {curr}\tpower: {pwr}")
         # запрещаю калибровку, многократная калибровка не нужна! Команда на каждое измерение выдается вручную!
         ina219.start_measurement(continuous=False, enable_calibration=False)
 

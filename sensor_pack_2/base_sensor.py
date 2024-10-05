@@ -206,13 +206,14 @@ class IBaseSensorEx:
         """Настраивает параметры датчика и запускает процесс измерения"""
         raise NotImplemented
 
-    def get_measurement_value(self):
-        """Возвращает измеренное датчиком значение(значения)"""
+    def get_measurement_value(self, value_index: int):
+        """Возвращает измеренное датчиком значение(значения) по его индексу/номеру."""
         raise NotImplemented
 
-#    def is_data_ready(self) -> bool:
-#        """Возвращает Истина, если данные доступны для считывания"""
-#        raise NotImplemented
+    def get_data_status(self):
+        """Возвращает состояние готовности данных для считывания?
+        Тип возвращаемого значения выбирайте сами!"""
+        raise NotImplemented
 
     def is_single_shot_mode(self) -> bool:
         """Возвращает Истина, когда датчик находится в режиме однократных измерений,
