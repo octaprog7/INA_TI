@@ -90,6 +90,9 @@ ESP или любой другой платы с прошивкой MicroPython!
 
 # Плата с INA219
 ![alt text](https://github.com/octaprog7/INA_TI/blob/master/pics/board.jpg)
+# Плата с INA226
+![alt text](https://github.com/octaprog7/INA_TI/blob/master/pics/board_226.jpg)
 # Среда разработки (IDE)
 ## IDE
 ![alt text](https://github.com/octaprog7/INA_TI/blob/master/pics/ide_0.png)
+![alt text](https://github.com/octaprog7/INA_TI/blob/master/pics/ide_226.png)
