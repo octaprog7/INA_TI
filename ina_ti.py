@@ -63,6 +63,10 @@ class INABase(BaseSensorEx):
         """"""
         super().__init__(adapter, address, True)
 
+    def get_cls_name(self) -> str:
+        """Возвращает имя класса от которого порожден экземпляр self"""
+        return self.__class__.__name__
+
     def get_16bit_reg(self, address: int, format_char: str) -> int:
         _raw = self.read_reg(address, 2)
         return self.unpack(format_char, _raw)[0]
@@ -95,15 +99,27 @@ class INABase(BaseSensorEx):
         """Возвращает цену наименьшего младшего разряда АЦП напряжения на шине в вольтах"""
         raise NotImplemented
 
-    def get_shunt_voltage(self) -> float:
-        """Возвращает напряжение на шунте в вольтах, которое образуется при протекании тока в нагрузке"""
+    def get_shunt_voltage(self, raw: bool = False) -> [float, int]:
+        """Возвращает напряжение на шунте в вольтах, которое образуется при протекании тока в нагрузке.
+        Если raw is True, то результат в 'сыром' виде. Удобно для определения перенапряжения!"""
         # print(f"DBG: shunt_lsb: {self.get_shunt_lsb()}\tshunt_raw: {self.get_shunt_reg()}")
-        return self.get_shunt_lsb() * self.get_shunt_reg()
+        _raw = self.get_shunt_reg()
+        if raw:
+            return _raw
+        return self.get_shunt_lsb() * _raw
 
-    def get_voltage(self):
+    def get_voltage(self, raw: bool = False):
         """Возвращает напряжение на шине(BUS) в вольтах.
-        Тип возвращаемого значения может изменятся в наследниках."""
-        raise NotImplemented
+        Тип возвращаемого значения может изменятся в наследниках.
+        Если raw is True, то результат в 'сыром' виде. Удобно для определения перенапряжения!"""
+        # raise NotImplemented
+        _raw = self.get_bus_reg()
+        cls_name = self.get_cls_name()
+        if "INA219" == cls_name:
+            _raw >>= 3  # для INA219 сдвигаю вправо на 3 бита
+        if raw:
+            return _raw
+        return self.get_bus_lsb() * _raw
 
 
 class INA219Simple(INABase):
@@ -152,7 +168,7 @@ class INA219Simple(INABase):
         Для текущих настроек датчика. При изменении настроек следует заново вызвать этот метод!"""
         return 532
 
-    def get_voltage(self) -> voltage_ina219:
+    def get_voltage(self, raw: bool = False) -> [int, voltage_ina219]:
         """Возвращает кортеж из входного измеряемого напряжения, флага готовности данных, флага математического переполнения (OVF).
         Флаг математического переполнения (OVF) устанавливается, когда расчеты мощности или тока выходят за допустимые
         пределы. Это указывает на то, что данные о токе и мощности могут быть бессмысленными!
@@ -170,9 +186,12 @@ class INA219Simple(INABase):
         This indicates that current and power data may be meaningless!"""
         # DC ACCURACY:  ADC basic resolution: 12 bit;    Bus voltage, 1 LSB step size: 4 mV
         _raw = self.get_bus_reg()
+        if raw:
+            return raw >> 3
         return voltage_ina219(bus_voltage=self.get_bus_lsb() * (_raw >> 3), data_ready=bool(_raw & 0x02),
                               overflow=bool(_raw & 0x01))
 
+ina_ti_data_status = namedtuple("ina_ti_data_status", "conversion_ready math_overflow")
 ina_voltage = namedtuple("ina_voltage", "shunt bus")
 
 class INABaseEx(INABase):
@@ -353,6 +372,21 @@ class INABaseEx(INABase):
         # возвращаю наибольшее значение, поскольку измерения производятся параллельно, как утверждает документация
         return max(_t0, _t1)
 
+    def get_data_status(self) -> ina_ti_data_status:
+        """Возвращает состояние готовности данных для считывания?
+        Тип возвращаемого значения выбирайте сами!"""
+        cls_name = self.get_cls_name()
+        if "INA219" == cls_name:
+            stat_raw = self.get_16bit_reg(0x02, "H")    # bus reg
+            return ina_ti_data_status(conversion_ready=bool(stat_raw & 0x02), math_overflow=bool(stat_raw & 0x01))
+
+        if "INA226" == cls_name:
+            stat_raw = self.get_16bit_reg(0x06, "H")    # mask/enable reg
+            return ina_ti_data_status(conversion_ready=bool(stat_raw & 0x08), math_overflow=bool(stat_raw & 0x04))
+
+        raise ValueError(f"Неверное имя класса для метода get_data_status: {cls_name}")
+
+
     def start_measurement(self, continuous: bool = True, enable_calibration: bool = False,
                           enable_shunt_adc: bool = True, enable_bus_adc: bool = True):
         """Настраивает параметры датчика и запускает процесс измерения.
@@ -401,9 +435,6 @@ class INABaseEx(INABase):
 
 
 
-
-ina219_data_status = namedtuple("ina219_data_status", "conversion_ready math_overflow")
-
 class INA219(INABaseEx, IBaseSensorEx, Iterator):   # INA219Simple
     """Class for work with TI INA219 sensor"""
 
@@ -432,24 +463,14 @@ class INA219(INABaseEx, IBaseSensorEx, Iterator):   # INA219Simple
                           bit_field_info(name='SADC_EN', position=range(0, 1), valid_values=None, description='1 - АЦП напряжения на токовом шунте включен, 0 - выключен'),
                           )
 
-#   функция описана в строке 47 этого файла
-#    @staticmethod
-#    def _get_conv_time(value: int) -> int:
-#        """Возвращает время из полей SADC, BADC в миллисекундах"""
-#        _conv_time = 84, 148, 276, 532
-#        if value < 8:
-#            value &= 0x3  # 0..3
-#            return _conv_time[value]
-#        # 0x8..0xF. Усреднение по 2, 4, 8, 16, 32, 64, 128 отсчетам
-#        value -= 0x08  # 0..7
-#        coefficient = 2 ** value
-#        return 532 * coefficient
-
     def __init__(self, adapter: bus_service.BusAdapter, address=0x40, shunt_resistance: float = 0.1):
         """shunt_resistance - сопротивление шунта, [Ом].
         max_shunt_voltage - предельное напряжение на шунте, по модулю, в Вольтах. Которое допускает АЦП."""
         super().__init__(adapter=adapter, address=address, max_shunt_voltage=INA219._shunt_voltage_limit,
                          shunt_resistance=shunt_resistance, fields_info=INA219._config_reg_ina219, internal_fixed_value=0.04096)
+        # последнее значение, считанное из регистра напряжения на шине.
+        # присваивается в методе get_data_status
+        self._last_bus_reg = None
 
     def soft_reset(self):
         self.set_cfg_reg(0b1011_1001_1001_1111)
@@ -512,23 +533,6 @@ class INA219(INABaseEx, IBaseSensorEx, Iterator):   # INA219Simple
         result = _get_conv_time(adc_field)
         return result
 
-#    def start_measurement(self, continuous: bool = True, enable_calibration: bool = False,
-#                          enable_shunt_adc: bool = True, enable_bus_adc: bool = True):
-#        """Настраивает параметры датчика и запускает процесс измерения.
-#        continuous - если Истина, то новое измерение запускается автоматически после завершения предидущего;
-#        enable_calibration - если Истина, то происходит калибровка под заданное сопротивление шунта и ток в нагрузке;
-#        enable_shunt_adc - включить измерение напряжения на токовом шунте;
-#        enable_bus_adc - включить измерение напряжения на шине;
-#        Настраивайте параметры датчика ДО вызова этого метода, за исключением:
-#             - continuous, enable_shunt_adc, enable_bus_adc"""
-#        self.set_config_field(enable_bus_adc, 'BADC_EN')
-#        self.set_config_field(enable_shunt_adc, 'SADC_EN')
-#        self.set_config_field(continuous, 'CNTNS')
-#        if enable_calibration:
-#            self.calibrate(self.max_expected_current, self.shunt_resistance)
-
-#        self.set_config()
-
     @property
     def bus_voltage_range(self) -> bool:
         """Возвращает измеряемый диапазон напряжений на шине. Если Истина то диапазон 0..25 Вольт, иначе 0..16 Вольт."""
@@ -585,21 +589,26 @@ class INA219(INABaseEx, IBaseSensorEx, Iterator):   # INA219Simple
     def shunt_adc_resolution(self, value: int):
         self.set_config_field(value, 'SADC')
 
-    def get_data_status(self) -> ina219_data_status:
-        """Возвращает состояние готовности данных, доступны ли данные для считывания?
-        Тип возвращаемого значения выбирайте сами!"""
-        breg_val = self.get_bus_reg()
-        return ina219_data_status(conversion_ready=bool(breg_val & 0x02), math_overflow=bool(breg_val & 0x01))
+#    def get_data_status(self) -> ina_ti_data_status:
+#        """Возвращает состояние готовности данных, доступны ли данные для считывания?
+#        Тип возвращаемого значения выбирайте сами!"""
+#        breg_val = self.get_bus_reg()
+#        self._last_bus_reg = breg_val
+#        return ina_ti_data_status(conversion_ready=bool(breg_val & 0x02), math_overflow=bool(breg_val & 0x01))
 
-    def get_voltage(self) -> float:
-        _raw = self.get_bus_reg()
-        return self.get_bus_lsb() * (_raw >> 3)
+#    def get_voltage(self, raw: bool = False) -> [int, float]:
+#        """Возвращает напряжение на шине.
+#        До вызова этого метода нужно вызвать get_data_status (только для INA219)!"""
+#        _raw = self._last_bus_reg >> 3
+#        if raw:
+#            return _raw
+#        return self.get_bus_lsb() * _raw
 
 
 ina226_id = namedtuple("ina226_id", "manufacturer_id die_id")
 config_ina226 = namedtuple("config_ina226", "AVG VBUSCT VSHCT CNTNS BADC_EN SADC_EN")
 voltage_status = namedtuple("voltage_status", "over_voltage under_voltage")
-ina226_data_status = namedtuple("ina226_data_status", "shunt_ov shunt_uv bus_ov bus_uv pwr_lim conv_ready alert_ff conv_ready_flag math_overflow alert_pol latch_en")
+# ina226_data_status = namedtuple("ina226_data_status", "shunt_ov shunt_uv bus_ov bus_uv pwr_lim conv_ready alert_ff conv_ready_flag math_overflow alert_pol latch_en")
 
 class INA226(INABaseEx, IBaseSensorEx, Iterator):   # INA219Simple
     """Class for work with TI INA226 sensor"""
@@ -703,24 +712,16 @@ class INA226(INABaseEx, IBaseSensorEx, Iterator):   # INA219Simple
     def soft_reset(self):
         self.set_cfg_reg(0b1100_0001_0010_0111)
 
-    def get_data_status(self) -> ina226_data_status:
-        """Возвращает именованный кортеж, состояния данных."""
-        me_reg = self.get_mask_enable()
-        # print(f"DBG: me_reg: 0x{me_reg:x}")
-        # print(f"conv_ready_flag: {me_reg & 0x08}")
-        # генератор масок. в обратном(!) порядке в соответствии с расположением полей в конструкторе
-        g_masks = (1 << i for i in range(15, -1, -1) if i not in range(5, 10))
-        # генератор значений для именованного кортежа (named tuple)
-        g_nt_vals = (bool(me_reg & mask) for mask in g_masks)
-        # в micropython у namedtuple отсутствует классовый метод _make, поэтому придется страдать ! :-(
-        # "shunt_ov shunt_uv bus_ov bus_uv pwr_lim conv_ready alert_ff conv_ready_flag math_overflow alert_pol latch_en"
-        return ina226_data_status(shunt_ov=next(g_nt_vals), shunt_uv=next(g_nt_vals), bus_ov=next(g_nt_vals), bus_uv=next(g_nt_vals),
-                                  pwr_lim=next(g_nt_vals), conv_ready=next(g_nt_vals), alert_ff=next(g_nt_vals),
-                                  conv_ready_flag=next(g_nt_vals), math_overflow=next(g_nt_vals), alert_pol=next(g_nt_vals),
-                                  latch_en=next(g_nt_vals))
+#    def get_data_status(self) -> ina_ti_data_status:
+#        """Возвращает именованный кортеж, состояния данных."""
+#        me_reg = self.get_mask_enable()
+#        return ina_ti_data_status(conversion_ready=bool(me_reg & 0x08), math_overflow=bool(me_reg & 0x04))
 
-    def get_voltage(self) -> float:
-        return self.get_bus_lsb() * self.get_bus_reg()
+#    def get_voltage(self, raw: bool = False) -> [float, int]:
+#        _raw = self.get_bus_reg()
+#        if raw:
+#            return _raw
+#        return self.get_bus_lsb() * _raw
 
     # IBaseSensorEx
     def get_measurement_value(self, value_index: int = 0):

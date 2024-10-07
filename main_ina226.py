@@ -9,6 +9,12 @@ def show_header(info: str, width: int = 32):
     print(info)
     print(width * "-")
 
+def show_status(status: ina_ti.ina_ti_data_status):
+    if status.conversion_ready:
+        print("conversion ready")
+    if status.math_overflow:
+        print("math overflow")
+
 def my_sleep(delay_us: int):
     time.sleep_us(delay_us)
 
@@ -43,7 +49,7 @@ if __name__ == '__main__':
     # класс с настройками
     ina226 = ina_ti.INA226(adapter=adaptor, address=0x40, shunt_resistance=0.01)
     ina226.shunt_voltage_enabled = True
-    ina226.max_expected_current = 2.0 # Ампер
+    ina226.max_expected_current = 1.0 # Ампер
 
     show_header("INA226. Настройки! Ручной режим измерений")
     ina226.start_measurement(continuous=False, enable_calibration=True)
@@ -54,8 +60,9 @@ if __name__ == '__main__':
         time.sleep_ms(100)
         my_sleep(wait_time_us)
         ds = ina226.get_data_status()
-        if not ds.conv_ready_flag:
+        if not ds.conversion_ready or ds.math_overflow:
             print(f"data status: {ds}")
+            time.sleep_ms(100)
             continue
         shunt_v, bus_v, curr, pwr = ina226.get_shunt_voltage(), ina226.get_voltage(), ina226.get_current(), ina226.get_power()
         print(f"Shunt: {shunt_v} V;\tBus: {bus_v}\tCurrent: {curr}\tpower: {pwr}")
@@ -68,8 +75,9 @@ if __name__ == '__main__':
     for data in ina226:
         my_sleep(wait_time_us)
         ds = ina226.get_data_status()
-        if not ds.conv_ready_flag:
+        if not ds.conversion_ready or ds.math_overflow:
             print(f"data status: {ds}")
+            time.sleep_ms(100)
             continue
         print(f"data: {data}, current: {ina226.get_current()}, pwr: {ina226.get_power()}")
         time.sleep_ms(100)
