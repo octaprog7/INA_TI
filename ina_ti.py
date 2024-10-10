@@ -108,18 +108,21 @@ class INABase(BaseSensorEx):
             return _raw
         return self.get_shunt_lsb() * _raw
 
-    def get_voltage(self, raw: bool = False):
+    def get_voltage(self, raw: bool = False) -> [int, float]:
         """Возвращает напряжение на шине(BUS) в вольтах.
         Тип возвращаемого значения может изменятся в наследниках.
         Если raw is True, то результат в 'сыром' виде. Удобно для определения перенапряжения!"""
-        # raise NotImplemented
         _raw = self.get_bus_reg()
         cls_name = self.get_cls_name()
-        if "INA219" == cls_name:
+        if "219" in cls_name:
             _raw >>= 3  # для INA219 сдвигаю вправо на 3 бита
         if raw:
             return _raw
         return self.get_bus_lsb() * _raw
+
+
+ina_ti_data_status = namedtuple("ina_ti_data_status", "conversion_ready math_overflow")
+ina_voltage = namedtuple("ina_voltage", "shunt bus")
 
 
 class INA219Simple(INABase):
@@ -168,31 +171,12 @@ class INA219Simple(INABase):
         Для текущих настроек датчика. При изменении настроек следует заново вызвать этот метод!"""
         return 532
 
-    def get_voltage(self, raw: bool = False) -> [int, voltage_ina219]:
-        """Возвращает кортеж из входного измеряемого напряжения, флага готовности данных, флага математического переполнения (OVF).
-        Флаг математического переполнения (OVF) устанавливается, когда расчеты мощности или тока выходят за допустимые
-        пределы. Это указывает на то, что данные о токе и мощности могут быть бессмысленными!
-        ------------------------------------------------------------------------------
-        Хотя данные последнего преобразования могут быть прочитаны в любое время, бит готовности к преобразованию указывает,
-        когда  доступны данные преобразования в регистрах вывода данных. Бит готовности данных устанавливается после завершения всех(!) преобразований,
-        усреднения и умножения. Он сбрасывается при следующих событиях:
-            1) Запись нового режима в биты режима работы в регистре конфигурации (за исключением отключения или отключения питания).
-            2) Чтение регистра мощности
-
-        Бит готовности (CNVR) к преобразованию устанавливается после завершения всех(!) операций преобразования, усреднения и умножения!
-        ------------------------------------------------------------------------------
-        Returns a tuple of input measured voltage, data ready flag, math overflow flag (OVF).
-        The Math Overflow Flag (OVF) is set when power or current calculations are out of range.
-        This indicates that current and power data may be meaningless!"""
-        # DC ACCURACY:  ADC basic resolution: 12 bit;    Bus voltage, 1 LSB step size: 4 mV
+    def get_data_status(self) -> ina_ti_data_status:
+        """Возвращает готовность данных к считыванию, conversion_ready должен быть Истина.
+        Если math_overflow в Истина, то превышен лимит тока через шунт (self.max_expected_current)."""
         _raw = self.get_bus_reg()
-        if raw:
-            return raw >> 3
-        return voltage_ina219(bus_voltage=self.get_bus_lsb() * (_raw >> 3), data_ready=bool(_raw & 0x02),
-                              overflow=bool(_raw & 0x01))
+        return ina_ti_data_status(conversion_ready=bool(_raw & 0x02), math_overflow=bool(_raw & 0x01))
 
-ina_ti_data_status = namedtuple("ina_ti_data_status", "conversion_ready math_overflow")
-ina_voltage = namedtuple("ina_voltage", "shunt bus")
 
 class INABaseEx(INABase):
     """Чтобы не перегружать InaBase ненужным функционалом"""
@@ -470,7 +454,7 @@ class INA219(INABaseEx, IBaseSensorEx, Iterator):   # INA219Simple
                          shunt_resistance=shunt_resistance, fields_info=INA219._config_reg_ina219, internal_fixed_value=0.04096)
         # последнее значение, считанное из регистра напряжения на шине.
         # присваивается в методе get_data_status
-        self._last_bus_reg = None
+        # self._last_bus_reg = None   # qqq
 
     def soft_reset(self):
         self.set_cfg_reg(0b1011_1001_1001_1111)
@@ -505,7 +489,9 @@ class INA219(INABaseEx, IBaseSensorEx, Iterator):   # INA219Simple
                 # установлю диапазон
                 self.current_shunt_voltage_range = index
                 return index
-        # raise ValueError(f"Не удалось подобрать диапазон напряжения на шунте для напряжения {voltage} Вольт!")
+        # возвращаю индекс диапазона с наибольшим напряжением на шунте,
+        # в данном случае это лучше выброса исключения. Пользователь с помощью метода
+        # get_data_status может определить 'перегрузку' на шунте
         return rng.stop - 1
 
     def get_current_config_hr(self) -> tuple:
