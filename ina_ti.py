@@ -589,21 +589,6 @@ class INA219(INABaseEx, IBaseSensorEx, Iterator):   # INA219Simple
     def shunt_adc_resolution(self, value: int):
         self.set_config_field(value, 'SADC')
 
-#    def get_data_status(self) -> ina_ti_data_status:
-#        """Возвращает состояние готовности данных, доступны ли данные для считывания?
-#        Тип возвращаемого значения выбирайте сами!"""
-#        breg_val = self.get_bus_reg()
-#        self._last_bus_reg = breg_val
-#        return ina_ti_data_status(conversion_ready=bool(breg_val & 0x02), math_overflow=bool(breg_val & 0x01))
-
-#    def get_voltage(self, raw: bool = False) -> [int, float]:
-#        """Возвращает напряжение на шине.
-#        До вызова этого метода нужно вызвать get_data_status (только для INA219)!"""
-#        _raw = self._last_bus_reg >> 3
-#        if raw:
-#            return _raw
-#        return self.get_bus_lsb() * _raw
-
 
 ina226_id = namedtuple("ina226_id", "manufacturer_id die_id")
 config_ina226 = namedtuple("config_ina226", "AVG VBUSCT VSHCT CNTNS BADC_EN SADC_EN")
@@ -711,17 +696,6 @@ class INA226(INABaseEx, IBaseSensorEx, Iterator):   # INA219Simple
 
     def soft_reset(self):
         self.set_cfg_reg(0b1100_0001_0010_0111)
-
-#    def get_data_status(self) -> ina_ti_data_status:
-#        """Возвращает именованный кортеж, состояния данных."""
-#        me_reg = self.get_mask_enable()
-#        return ina_ti_data_status(conversion_ready=bool(me_reg & 0x08), math_overflow=bool(me_reg & 0x04))
-
-#    def get_voltage(self, raw: bool = False) -> [float, int]:
-#        _raw = self.get_bus_reg()
-#        if raw:
-#            return _raw
-#        return self.get_bus_lsb() * _raw
 
     # IBaseSensorEx
     def get_measurement_value(self, value_index: int = 0):
