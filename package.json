@@ -1,0 +1,15 @@
+{
+  "urls": [
+    ["ina_ti.py", "github:octaprog7/INA_TI/ina_ti.py"],
+    ["main_ina219.py", "github:octaprog7/INA_TI/main_ina219.py"],
+    ["main_ina226.py", "github:octaprog7/INA_TI/main_ina226.py"],
+    ["sensor_pack_2/__init__.py", "github:octaprog7/INA_TI/sensor_pack_2/__init__.py"],
+    ["sensor_pack_2/adcmod.py", "github:octaprog7/INA_TI/sensor_pack_2/adcmod.py"],
+    ["sensor_pack_2/base_sensor.py", "github:octaprog7/INA_TI/sensor_pack_2/base_sensor.py"],
+    ["sensor_pack_2/bitfield.py", "github:octaprog7/INA_TI/sensor_pack_2/bitfield.py"],
+    ["sensor_pack_2/bus_service.py", "github:octaprog7/INA_TI/sensor_pack_2/bus_service.py"],
+    ["sensor_pack_2/regmod.py", "github:octaprog7/INA_TI/sensor_pack_2/regmod.py"]
+  ],
+  "version": "1.0.0",
+  "deps": []
+}
